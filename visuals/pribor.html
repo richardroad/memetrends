@@ -1,0 +1,604 @@
+<title>Прибор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed instrument screen; a rail of instruments on top, one glass console bottom-left for source and dials. */
+:root {
+  --ink: #ebeef2;
+  --ink-dim: #9aa3ad;
+  --ink-faint: #5e6670;
+  --glass: rgba(8, 10, 12, 0.64);
+  --line: rgba(210, 220, 230, 0.14);
+  --stage: #030405;
+  --accent: #ff9a3c;
+  --f-display: "Unbounded", "Manrope", system-ui, sans-serif;
+  --f-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--stage); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--stage); touch-action: none; }
+.ui { transition: opacity .3s ease; }
+body.ui-hidden .ui { opacity: 0; pointer-events: none; }
+
+.top { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top, 0px) + 14px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.brand i { width: 10px; height: 10px; border: 2px solid var(--accent); border-radius: 50%; box-shadow: 0 0 12px var(--accent); transition: border-color .5s, box-shadow .5s; }
+.modes { display: flex; gap: 5px; flex-wrap: wrap; pointer-events: auto; }
+.modes button { font-family: var(--f-body); font-size: 12px; font-weight: 600; color: var(--ink-dim); background: var(--glass); border: 1px solid var(--line); padding: 7px 11px 7px 9px; border-radius: 999px; cursor: pointer; display: flex; gap: 7px; align-items: center; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.modes button kbd { font-family: var(--f-mono); font-size: 10px; color: var(--ink-faint); }
+.modes button:hover { color: var(--ink); }
+.modes button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--stage); }
+.modes button[aria-pressed="true"] kbd { color: rgba(3,4,5,.55); }
+
+.console { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); width: 320px; max-width: calc(100vw - 32px); max-height: calc(100vh - 110px); overflow-y: auto; background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; display: grid; gap: 11px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.console h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 19px; }
+.desc { margin: -4px 0 0; font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+.lbl { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); border-top: 1px solid var(--line); padding-top: 10px; }
+.src-name { font-size: 11.5px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+.ctl label { font-size: 12.5px; }
+.ctl output { font-family: var(--f-mono); font-size: 11px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.ctl input { grid-column: 1 / -1; }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, var(--accent) var(--p, 50%), rgba(210,220,230,.18) var(--p, 50%)); border-radius: 2px; }
+input[type=range]::-moz-range-track { height: 2px; background: rgba(210,220,230,.18); }
+input[type=range]::-moz-range-progress { height: 2px; background: var(--accent); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px rgba(3,4,5,.6); }
+input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 0; }
+input[type=range]:focus-visible { outline: 1px dashed var(--accent); outline-offset: 3px; }
+.row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.btn { font-family: var(--f-body); font-size: 12px; font-weight: 600; color: var(--ink); background: rgba(210,220,230,.08); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.btn:hover { background: rgba(210,220,230,.16); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--stage); }
+.btn.rec { color: #ff6b6b; }
+.btn.rec.on { background: #ff4d4d; border-color: #ff4d4d; color: #fff; }
+.btn[disabled] { opacity: .4; cursor: default; }
+.btn kbd { font-family: var(--f-mono); font-size: 10px; opacity: .6; }
+.btn:focus-visible, .modes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-dim); cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.hint { margin: 0; font-size: 11px; color: var(--ink-faint); line-height: 1.55; }
+.hint kbd { font-family: var(--f-mono); color: var(--ink-dim); }
+.show-ui { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); opacity: 0; pointer-events: none; }
+body.ui-hidden .show-ui { opacity: .35; pointer-events: auto; }
+body.ui-hidden .show-ui:hover { opacity: 1; }
+.fab { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: none; }
+.toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 60px); transform: translateX(-50%); background: var(--glass); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 12.5px; backdrop-filter: blur(10px); opacity: 0; transition: opacity .25s; pointer-events: none; max-width: calc(100vw - 32px); text-align: center; }
+.toast.show { opacity: 1; }
+.fail { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-dim); }
+@media (max-width: 720px) {
+  .console { right: max(16px, env(safe-area-inset-right, 0px)); width: auto; max-height: 55vh; bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); }
+  body.collapsed .console { display: none; }
+  .fab { display: inline-flex; }
+}
+@media (prefers-reduced-motion: reduce) { .ui, .toast { transition: none; } }
+</style>
+
+<canvas id="gl" aria-label="Экран прибора"></canvas>
+<header class="top ui">
+  <div class="brand"><i></i>Прибор</div>
+  <nav class="modes" id="modes" aria-label="Приборы"></nav>
+</header>
+
+<aside class="console ui" aria-label="Пульт прибора">
+  <h2 id="modeName"></h2>
+  <p class="desc" id="modeDesc"></p>
+
+  <div class="lbl">Материал</div>
+  <div class="row">
+    <label class="btn primary" for="file" style="cursor:pointer">Загрузить видео или фото</label>
+    <input type="file" id="file" accept="video/*,image/*" hidden>
+    <button class="btn" id="demoBtn" type="button">Демо</button>
+    <button class="btn" id="playBtn" type="button" hidden>Пауза</button>
+  </div>
+  <div class="src-name" id="srcName">Демо: дым в вихре. Загрузи своё, снятое на телефон.</div>
+
+  <div class="lbl">Настройка</div>
+  <div id="ctls" style="display:grid;gap:9px"></div>
+  <label class="check" for="hudOn"><input type="checkbox" id="hudOn" checked> Шкалы и подписи прибора</label>
+
+  <div class="row">
+    <button class="btn" id="shotBtn" type="button">Сохранить кадр</button>
+    <button class="btn rec" id="recBtn" type="button">● Запись</button>
+    <button class="btn" id="fsBtn" type="button">Экран <kbd>F</kbd></button>
+    <button class="btn" id="hideBtn" type="button">Скрыть <kbd>H</kbd></button>
+  </div>
+  <p class="hint" id="saveHint"><kbd>1–8</kbd> приборы · <kbd>Пробел</kbd> пауза видео · <kbd>H</kbd> скрыть пульт · <kbd>F</kbd> полный экран</p>
+</aside>
+<button class="btn show-ui" id="showUi" type="button">Пульт</button>
+<div class="fab ui"><button class="btn" id="collapseBtn" type="button">Пульт</button></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+const MODES = [
+  { key: "thermal", name: "Тепловизор", accent: "#ff9a3c", desc: "Видно тепло, а не свет. Яркое горячее, тёмное холодное. Для Платины: иней как холод, съедающий тепло.",
+    a: ["Чувствительность", .45], b: ["Палитра", 0, v => v < .34 ? "железо" : v < .67 ? "радуга" : "белый горячий"] },
+  { key: "radar", name: "Метеорадар", accent: "#5fe39a", desc: "Луч развёртки обходит круг и обновляет эхо. Режим скорости красит ветер красным и зелёным. Для Саши Вортекс.",
+    a: ["Скорость луча", .3], b: ["Режим", 0, v => v < .5 ? "отражаемость" : "скорость ветра"] },
+  { key: "sem", name: "Микроскоп", accent: "#d9dde2", desc: "Электронный микроскоп: чёрно-белый рельеф, светящиеся края, шум развёртки. Масштаб становится неясен.",
+    a: ["Рельеф", .5], b: ["Увеличение", .15, v => "×" + Math.round(500 * (1 + v * 4))] },
+  { key: "slit", name: "Щель времени", accent: "#b48cff", desc: "Каждая часть кадра показывает своё мгновение. Спираль закручивает само время в вихрь.",
+    a: ["Глубина времени", .6], b: ["Форма", .55, v => ["строки", "круг", "спираль", "столбцы"][Math.min(3, Math.floor(v * 4))]] },
+  { key: "mosh", name: "Датамош", accent: "#ff5fa2", desc: "Движение нового кадра тащит пиксели старого. Как сломанное сжатие видео. Нужен движущийся материал.",
+    a: ["Текучесть", .65], b: ["Размер блоков", .2, v => Math.round(8 + v * 40) + " px"] },
+  { key: "moire", name: "Муар", accent: "#7fd6ff", desc: "Две сетки линий накладываются и дают интерференцию. Как экран, переснятый на телефон.",
+    a: ["Частота линий", .35], b: ["Угол сеток", .3] },
+  { key: "diff", name: "Дифракция", accent: "#ffe15c", desc: "Яркие точки раскладываются в спектр, как свет на поверхности CD-диска.",
+    a: ["Длина лучей", .5], b: ["Угол", .2] },
+  { key: "crt", name: "Кинескоп", accent: "#ff6b4a", desc: "Старый телевизор и магнит у экрана: картинка закручивается радужным вихрем. Тяни магнит пальцем или мышью.",
+    a: ["Сила магнита", .65], b: ["Развёртка", .5] },
+];
+const S = { mode: 0, hud: true, mix: 0, p: MODES.map(m => ({ a: m.a[1], b: m.b[1] })) };
+try { const o = JSON.parse(localStorage.getItem("pribor") || "null"); if (o && o.p && o.p.length === MODES.length) Object.assign(S, o); } catch (e) {}
+const save = () => { try { localStorage.setItem("pribor", JSON.stringify(S)); } catch (e) {} };
+
+/* ---------------- GL ---------------- */
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, preserveDrawingBuffer: false });
+if (!gl) { document.body.insertAdjacentHTML("beforeend", '<div class="fail">Нужен WebGL2. Откройте страницу в свежем Chrome, Safari или Firefox.</div>'); return; }
+
+const VERT = `#version 300 es
+in vec2 aPos; out vec2 vUv; void main(){ vUv=aPos*.5+.5; gl_Position=vec4(aPos,0.,1.); }`;
+const HEAD = `#version 300 es
+precision highp float;
+precision highp sampler2DArray;
+in vec2 vUv; out vec4 o;
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x), mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x), u.y); }
+float fbm(vec2 p){ float v=0., a=.5; mat2 m=mat2(1.6,1.2,-1.2,1.6); for(int i=0;i<5;i++){ v+=a*noise(p); p=m*p; a*=.5; } return v; }
+float L(vec3 c){ return dot(c,vec3(.299,.587,.114)); }
+mat2 rot(float a){ return mat2(cos(a),-sin(a),sin(a),cos(a)); }
+`;
+const SRC_FS = HEAD + `
+uniform sampler2D uIn; uniform vec2 uScale, uRes; uniform float uDemo, uTime;
+vec3 demo(vec2 uv){
+  vec2 p=(uv-.5)*vec2(uRes.x/uRes.y,1.);
+  float t=uTime, r=length(p);
+  float ang=t*.22+1.5/(r+.35);
+  vec2 q=rot(ang)*p;
+  float s=fbm(q*2.6+vec2(0.,-t*.15))*.7+fbm(q*7.-t*.1)*.3;
+  float smoke=smoothstep(.38,.85,s)*smoothstep(.8,.12,r);
+  vec2 b1=vec2(sin(t*.37)*.42, cos(t*.29)*.18);
+  vec2 b2=vec2(cos(t*.21)*.5, sin(t*.33)*.25-.05);
+  float hot=exp(-length(p-b1)*7.)*.9+exp(-length((p-b2)*vec2(1.,.45))*5.)*.55;
+  float core=exp(-r*10.)*.9;
+  float streak=exp(-abs(p.y+.32+.05*sin(p.x*3.+t))*60.)*smoothstep(.9,.2,abs(p.x))*.6;
+  return vec3(smoke*.7)+vec3(1.,.93,.85)*(hot+core)+vec3(.9)*streak;
+}
+void main(){
+  vec3 c = uDemo>.5 ? demo(vUv) : texture(uIn,(vUv-.5)*uScale+.5).rgb;
+  o=vec4(c,1.);
+}`;
+const COPY_FS = HEAD + `uniform sampler2D uIn; void main(){ o=texture(uIn,vUv); }`;
+const FX_FS = HEAD + `
+uniform sampler2D uSrc, uPrev, uFb; uniform sampler2DArray uHist;
+uniform vec2 uRes, uMag;
+uniform float uMode, uA, uB, uTime, uHead, uN, uSweep, uSweepPrev, uSeed;
+float Ls(vec2 uv){ return L(texture(uSrc,uv).rgb); }
+vec3 iron(float t){
+  t=clamp(t,0.,1.);
+  if(t<.2) return mix(vec3(0.),vec3(.13,0.,.38),t/.2);
+  if(t<.45) return mix(vec3(.13,0.,.38),vec3(.62,.03,.45),(t-.2)/.25);
+  if(t<.7) return mix(vec3(.62,.03,.45),vec3(.96,.36,.05),(t-.45)/.25);
+  if(t<.88) return mix(vec3(.96,.36,.05),vec3(1.,.82,.2),(t-.7)/.18);
+  return mix(vec3(1.,.82,.2),vec3(1.),(t-.88)/.12);
+}
+vec3 hueT(float h){ return clamp(abs(fract(h+vec3(0.,.333,.667))*6.-3.)-1.,0.,1.); }
+vec3 rainbowT(float t){ t=clamp(t,0.,1.); return hueT(.66-t*.72)*smoothstep(0.,.1,t)+vec3(1.)*smoothstep(.93,1.,t); }
+vec3 spectrum(float t){ return hueT(t*.8); }
+vec3 radarPal(float l){
+  if(l<.14) return vec3(0.);
+  if(l<.26) return vec3(.0,.55,.78);
+  if(l<.38) return vec3(.0,.82,.32);
+  if(l<.5)  return vec3(.0,.5,.15);
+  if(l<.62) return vec3(1.,.9,0.);
+  if(l<.74) return vec3(1.,.55,0.);
+  if(l<.86) return vec3(.95,.1,.1);
+  return vec3(.85,.25,.95);
+}
+float moire(vec2 p, float l, float fq, vec2 d2, float ph){
+  float g1=.5+.5*sin(p.y*fq+l*9.+ph);
+  float g2=.5+.5*sin(dot(p,d2)*fq*1.02+ph*.5+uTime*.3);
+  return g1*g2;
+}
+void main(){
+  vec2 uv=vUv; vec2 px=1./uRes; float asp=uRes.x/uRes.y;
+  vec3 src=texture(uSrc,uv).rgb;
+  int m=int(uMode+.5);
+  if(uSeed>.5){ o=vec4(m==1 ? vec3(0.) : src,1.); return; }
+  vec3 c=src;
+  if(m==0){
+    vec2 g=vec2(480.,480./asp);
+    vec2 q=(floor(uv*g)+.5)/g;
+    float l=(Ls(q)*2.+Ls(q+px*3.)+Ls(q-px*3.)+Ls(q+vec2(px.x,-px.y)*3.)+Ls(q+vec2(-px.x,px.y)*3.))/6.;
+    float t=clamp((l-.5)*(1.+uA*4.)+.5,0.,1.);
+    t=mix(t,t*t*(3.-2.*t),.4);
+    c = uB<.34 ? iron(t) : (uB<.67 ? rainbowT(t) : vec3(t));
+    c += (hash(uv*uRes+fract(uTime)*91.)-.5)*.035;
+    c *= .975+.025*sin(uv.x*uRes.x*.5);
+  } else if(m==1){
+    vec2 p=(uv-.5)*vec2(asp,1.); float r=length(p)/.46; float a=atan(p.y,p.x);
+    vec3 prevO=texture(uFb,uv).rgb*.994;
+    float d=mod(uSweep-a,6.28318); float span=mod(uSweep-uSweepPrev,6.28318)+.003;
+    if(d<span && r<1.){
+      float l=Ls(uv)*(.8+.4*noise(uv*90.+uTime*.5));
+      vec3 refl=radarPal(floor(l*8.)/8.);
+      vec2 gr=vec2(Ls(uv+vec2(px.x*3.,0.))-Ls(uv-vec2(px.x*3.,0.)), Ls(uv+vec2(0.,px.y*3.))-Ls(uv-vec2(0.,px.y*3.)));
+      float v=dot(normalize(p+1e-4),gr)*28.;
+      float lv=Ls(uv);
+      vec3 vel=(v>0. ? vec3(1.,.18,.12) : vec3(.12,1.,.35))*clamp(abs(v),0.,1.)*step(.1,lv)*(.4+lv);
+      c = uB<.5 ? refl : vel;
+    } else c=prevO;
+  } else if(m==2){
+    float z=1.+uB*4.; vec2 zuv=(uv-.5)/z+.5;
+    float line=floor(uv.y*uRes.y*.5);
+    zuv.x+=(step(.985,hash(vec2(line,floor(uTime*12.))))-0.)*.004*(hash(vec2(line,3.))-.5);
+    vec2 e=1.5*px/z;
+    float l=Ls(zuv);
+    vec2 g=vec2(Ls(zuv+vec2(e.x,0.))-Ls(zuv-vec2(e.x,0.)), Ls(zuv+vec2(0.,e.y))-Ls(zuv-vec2(0.,e.y)));
+    float edge=length(g)*(4.+uA*14.);
+    float shade=dot(g,vec2(-.7,.7))*(3.+uA*10.);
+    float v=l*.55+edge*.8+shade*.5+.06;
+    v=pow(clamp(v,0.,1.),1.15);
+    v+=(hash(vec2(line,floor(uTime*24.)))-.5)*.05+(hash(uv*uRes+uTime)-.5)*.08;
+    c=vec3(v);
+  } else if(m==3){
+    vec2 p=(uv-.5)*vec2(asp,1.);
+    float f;
+    if(uB<.25) f=1.-uv.y;
+    else if(uB<.5) f=clamp(length(p)/.85,0.,1.);
+    else if(uB<.75) f=fract(length(p)*1.6-atan(p.y,p.x)/6.28318+uTime*.02);
+    else f=uv.x;
+    float off=f*uA*(uN-2.);
+    float fl=floor(off), fr=off-fl;
+    float l0=mod(uHead-fl+uN,uN), l1=mod(uHead-fl-1.+uN,uN);
+    c=mix(texture(uHist,vec3(uv,l0)).rgb, texture(uHist,vec3(uv,l1)).rgb, fr);
+  } else if(m==4){
+    vec2 bs=(8.+uB*40.)*px;
+    vec2 buv=(floor(uv/bs)+.5)*bs;
+    float c0=Ls(buv), p0=L(texture(uPrev,buv).rgb);
+    vec2 g=vec2(Ls(buv+vec2(bs.x,0.))-Ls(buv-vec2(bs.x,0.)), Ls(buv+vec2(0.,bs.y))-Ls(buv-vec2(0.,bs.y)));
+    float dt=c0-p0;
+    vec2 flow=clamp(-dt*g/(dot(g,g)+.002)*bs*.6, -bs*2., bs*2.);
+    vec3 moshed=texture(uFb, uv-flow*(1.+uA*3.)).rgb;
+    float keep=.9+uA*.095;
+    c=mix(src,moshed,keep);
+  } else if(m==5){
+    vec2 p=(uv-.5)*vec2(asp,1.);
+    float l=Ls(uv);
+    float fq=80.+uA*520.;
+    float rr=uB*.3+.015;
+    vec2 d2=vec2(sin(rr),cos(rr));
+    c=vec3(moire(p,l,fq,d2,0.), moire(p,l,fq,d2,2.094), moire(p,l,fq,d2,4.189));
+    c*=.2+l*1.5;
+  } else if(m==6){
+    vec3 base=src*.55;
+    float ang=uB*3.14159+uTime*.04;
+    vec2 d=vec2(cos(ang),sin(ang))*vec2(1./asp,1.)*(.003+uA*.012);
+    vec2 dp=vec2(-d.y*asp,d.x/asp)*.6;
+    vec3 acc=vec3(0.);
+    for(int i=1;i<=24;i++){
+      float fi=float(i)/24.;
+      vec3 sp=spectrum(fi);
+      float b1=max(L(texture(uSrc,uv-d*float(i)).rgb)-.72,0.);
+      float b2=max(L(texture(uSrc,uv+d*float(i)).rgb)-.72,0.);
+      float b3=max(L(texture(uSrc,uv-dp*float(i)).rgb)-.6,0.);
+      float b4=max(L(texture(uSrc,uv+dp*float(i)).rgb)-.6,0.);
+      acc+=sp*((b1+b2)*(1.-fi*.6)+(b3+b4)*.35*(1.-fi));
+    }
+    c=base+acc*.11;
+  } else {
+    vec2 as=vec2(asp,1.);
+    vec2 dp=(uv-uMag)*as; float r=length(dp);
+    float tw=uA*2.4*exp(-r*5.);
+    c.r=texture(uSrc,uMag+rot(tw)*dp/as).r;
+    c.g=texture(uSrc,uMag+rot(tw*1.25)*dp/as).g;
+    c.b=texture(uSrc,uMag+rot(tw*1.5)*dp/as).b;
+    vec3 stain=.5+.5*cos(6.2831*(r*3.-uTime*.1+vec3(0.,.33,.67)));
+    c=mix(c,c*stain*1.7,uA*.65*exp(-r*4.));
+  }
+  o=vec4(c,1.);
+}`;
+const OUT_FS = HEAD + `
+uniform sampler2D uOut, uSrc, uHud; uniform vec2 uRes;
+uniform float uMode, uMix, uB, uTime, uSweep, uHudOn;
+void main(){
+  vec2 uv=vUv; float asp=uRes.x/uRes.y; int m=int(uMode+.5);
+  if(m==7){ vec2 cc=uv-.5; uv=.5+cc*(1.+dot(cc,cc)*.2); }
+  vec3 c=texture(uOut,uv).rgb;
+  c=mix(c,texture(uSrc,uv).rgb,uMix);
+  if(m==1){
+    vec2 p=(vUv-.5)*vec2(asp,1.); float r=length(p)/.46; float a=atan(p.y,p.x);
+    float inside=step(r,1.);
+    c=max(c,vec3(0.,.03,.025))*inside;
+    vec3 g=vec3(.25,.78,.55); float w=1.4/(uRes.y*.46);
+    for(int k=1;k<=4;k++){ float ring=1.-smoothstep(0.,w,abs(r-float(k)*.25)); c+=g*ring*(k==4?.55:.28); }
+    float am=mod(a,.5236); float sp=1.-smoothstep(0.,w/max(r,.05),min(am,.5236-am));
+    c+=g*sp*.1*inside*step(.06,r);
+    float d=mod(uSweep-a,6.28318);
+    c+=vec3(.3,1.,.6)*(exp(-d*7.)*.16+(1.-smoothstep(0.,.012,d))*.55)*inside;
+  }
+  if(m==7){
+    if(uv.x<0.||uv.x>1.||uv.y<0.||uv.y>1.) c=vec3(0.);
+    float sl=.5+.5*sin(uv.y*uRes.y*1.5708);
+    c*=mix(1.,.55+.45*sl,.45+uB*.55);
+    float m3=mod(gl_FragCoord.x,3.);
+    vec3 mask=m3<1.?vec3(1.,.4,.4):(m3<2.?vec3(.4,1.,.4):vec3(.4,.4,1.));
+    c*=mix(vec3(1.),mask*1.4,.4);
+    float roll=fract(uTime*.11);
+    c*=1.+uB*.25*exp(-pow((uv.y-roll)*10.,2.));
+    c*=.965+.035*sin(uTime*55.);
+    vec2 cc=abs(vUv-.5)-.45; c*=smoothstep(.06,.03,length(max(cc,0.)));
+  }
+  vec4 h=texture(uHud,vUv);
+  c=mix(c,h.rgb,h.a*uHudOn);
+  c+=(hash(vUv*uRes+fract(uTime)*37.)-.5)*.012;
+  o=vec4(c,1.);
+}`;
+function compile(t, s) { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; }
+function prog(fs) {
+  const p = gl.createProgram(); gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, "aPos"); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const inf = gl.getActiveUniform(p, i); u[inf.name] = gl.getUniformLocation(p, inf.name); }
+  return { p, u };
+}
+let P;
+try { P = { src: prog(SRC_FS), copy: prog(COPY_FS), fx: prog(FX_FS), out: prog(OUT_FS) }; }
+catch (e) { console.error(e); document.body.insertAdjacentHTML("beforeend", '<div class="fail">Шейдер не собрался на этой видеокарте.</div>'); return; }
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+const qb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, qb);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+function tex2d(w, h) { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; }
+function target(w, h) { const tex = tex2d(w, h); const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0); return { tex, fb }; }
+const inTex = tex2d(2, 2), hudTex = tex2d(2, 2);
+const HN = 48;
+let W = 0, H = 0, HW = 0, HH = 0, T = null;
+function resize() {
+  const s = Math.min(devicePixelRatio || 1, 1.5);
+  let w = Math.round(innerWidth * s), h = Math.round(innerHeight * s);
+  const k = Math.min(1, 1920 / Math.max(w, h)); w = Math.max(64, Math.round(w * k)); h = Math.max(64, Math.round(h * k));
+  if (w === W && h === H) return;
+  W = w; H = h; canvas.width = w; canvas.height = h;
+  if (T) { [T.s0, T.s1, T.o0, T.o1].forEach(t => { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }); gl.deleteTexture(T.hist); gl.deleteFramebuffer(T.hfb); }
+  HW = 480; HH = Math.max(32, Math.round(480 * h / w));
+  const hist = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, hist);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, HW, HH, HN, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  T = { s0: target(w, h), s1: target(w, h), o0: target(w, h), o1: target(w, h), hist, hfb: gl.createFramebuffer() };
+  hud.width = Math.round(w / 2); hud.height = Math.round(h / 2);
+  seed = 2;
+}
+addEventListener("resize", resize);
+
+/* ---------------- source ---------------- */
+let srcEl = null, srcKind = "demo", srcW = 16, srcH = 9;
+const video = document.createElement("video"); video.muted = true; video.loop = true; video.playsInline = true; video.setAttribute("playsinline", "");
+const img = new Image();
+const $ = id => document.getElementById(id);
+$("file").addEventListener("change", () => {
+  const f = $("file").files && $("file").files[0]; if (!f) return;
+  const url = URL.createObjectURL(f);
+  if (f.type.startsWith("video")) {
+    if (video.src) URL.revokeObjectURL(video.src);
+    video.src = url; video.play().catch(() => {});
+    video.onloadedmetadata = () => { srcW = video.videoWidth; srcH = video.videoHeight; };
+    srcEl = video; srcKind = "video"; $("playBtn").hidden = false; $("playBtn").textContent = "Пауза";
+  } else {
+    img.onload = () => { srcW = img.naturalWidth; srcH = img.naturalHeight; uploadIn(img); };
+    img.src = url; srcEl = img; srcKind = "image"; $("playBtn").hidden = true;
+  }
+  $("srcName").textContent = f.name; seed = 2;
+});
+$("demoBtn").addEventListener("click", () => { srcKind = "demo"; video.pause(); $("playBtn").hidden = true; $("srcName").textContent = "Демо: дым в вихре. Загрузи своё, снятое на телефон."; seed = 2; });
+const togglePlay = () => { if (srcKind !== "video") return; video.paused ? video.play() : video.pause(); $("playBtn").textContent = video.paused ? "Пуск" : "Пауза"; };
+$("playBtn").addEventListener("click", togglePlay);
+function uploadIn(el) { gl.bindTexture(gl.TEXTURE_2D, inTex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); }
+
+/* ---------------- UI ---------------- */
+const ctlHost = $("ctls"); const sliders = {};
+function slider(id, label, val, on, fmt) {
+  const d = document.createElement("div"); d.className = "ctl";
+  d.innerHTML = `<label for="${id}"></label><output></output><input id="${id}" type="range" min="0" max="1" step="0.005">`;
+  ctlHost.appendChild(d);
+  const inp = d.querySelector("input"), out = d.querySelector("output"), lab = d.querySelector("label");
+  const api = { fmt, set(v, l, f) { inp.value = v; if (l) lab.textContent = l; if (f !== undefined) api.fmt = f; paint(); } };
+  const paint = () => { inp.style.setProperty("--p", inp.value * 100 + "%"); out.textContent = api.fmt ? api.fmt(+inp.value) : Math.round(inp.value * 100) + "%"; };
+  inp.addEventListener("input", () => { on(+inp.value); paint(); save(); });
+  api.set(val, label); return api;
+}
+sliders.a = slider("pa", "", 0, v => S.p[S.mode].a = v);
+sliders.b = slider("pb", "", 0, v => S.p[S.mode].b = v);
+sliders.mix = slider("pmix", "Смешать с оригиналом", S.mix, v => S.mix = v);
+const nav = $("modes");
+MODES.forEach((m, i) => { const b = document.createElement("button"); b.type = "button"; b.innerHTML = `<kbd>${i + 1}</kbd>${m.name}`; b.addEventListener("click", () => setMode(i)); nav.appendChild(b); });
+function setMode(i) {
+  S.mode = i; const m = MODES[i]; save(); seed = 2;
+  [...nav.children].forEach((b, j) => b.setAttribute("aria-pressed", j === i));
+  document.documentElement.style.setProperty("--accent", m.accent);
+  $("modeName").textContent = m.name; $("modeDesc").textContent = m.desc;
+  sliders.a.set(S.p[i].a, m.a[0], null); sliders.b.set(S.p[i].b, m.b[0], m.b[2] || null);
+}
+$("hudOn").checked = S.hud; $("hudOn").addEventListener("change", e => { S.hud = e.target.checked; save(); });
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove("show"), 2400); }
+async function toggleFS() { try { document.fullscreenElement ? await document.exitFullscreen() : await document.documentElement.requestFullscreen(); } catch (e) { toast("Полный экран здесь недоступен"); } }
+const toggleUI = () => document.body.classList.toggle("ui-hidden");
+$("fsBtn").addEventListener("click", toggleFS); $("hideBtn").addEventListener("click", toggleUI); $("showUi").addEventListener("click", toggleUI);
+$("collapseBtn").addEventListener("click", () => document.body.classList.toggle("collapsed"));
+if (innerWidth <= 720) document.body.classList.add("collapsed");
+addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("textarea, input[type=text]")) return;
+  const k = e.key.toLowerCase();
+  if (k >= "1" && k <= "8") setMode(+k - 1);
+  else if (k === "h" || k === "р") toggleUI();
+  else if (k === "f" || k === "а") toggleFS();
+  else if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+});
+
+/* magnet */
+let mag = [.5, .5], magManual = 0;
+function ptr(e) { if (S.mode !== 7) return; const r = canvas.getBoundingClientRect(); mag = [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height]; magManual = performance.now() + 4000; }
+let dragging = false;
+canvas.addEventListener("pointerdown", e => { dragging = true; ptr(e); });
+addEventListener("pointermove", e => { if (dragging) ptr(e); });
+addEventListener("pointerup", () => dragging = false);
+
+/* saving */
+let downloads = null;
+(async () => { try { downloads = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (e) { downloads = null; }
+  if (!downloads) { $("shotBtn").disabled = true; $("recBtn").disabled = true; $("saveHint").insertAdjacentHTML("afterbegin", "Сохранение файлов в этом окне недоступно. "); } })();
+async function offer(blob, name) {
+  if (!downloads) return;
+  try { await downloads.save({ filename: name, data: blob }); toast("Сохранено: " + name); }
+  catch (e) { if (e && e.code === "declined") return; toast(e && e.code === "unavailable" ? "Сохранение здесь недоступно" : "Не получилось сохранить файл"); }
+}
+let wantShot = false;
+$("shotBtn").addEventListener("click", () => wantShot = true);
+let rec = null, recChunks = [], recTimer = 0;
+const recMime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+if (!recMime) $("recBtn").hidden = true;
+$("recBtn").addEventListener("click", () => {
+  if (rec) { rec.stop(); return; }
+  const stream = canvas.captureStream(30);
+  rec = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 16e6 }); recChunks = [];
+  rec.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  rec.onstop = () => { clearTimeout(recTimer); const ext = recMime.includes("mp4") ? "mp4" : "webm"; const blob = new Blob(recChunks, { type: recMime }); rec = null; $("recBtn").classList.remove("on"); $("recBtn").textContent = "● Запись"; offer(blob, `pribor-${MODES[S.mode].key}.${ext}`); };
+  rec.start(500); $("recBtn").classList.add("on"); $("recBtn").textContent = "■ Стоп";
+  recTimer = setTimeout(() => rec && rec.stop(), 30000);
+  toast("Запись идёт, до 30 секунд");
+});
+
+/* ---------------- HUD ---------------- */
+const hud = document.createElement("canvas"), hx = hud.getContext("2d");
+let centerL = .5;
+const pad2 = n => String(n).padStart(2, "0");
+function drawHud(now) {
+  const w = hud.width, h = hud.height, u = h / 450;
+  hx.clearRect(0, 0, w, h);
+  const m = MODES[S.mode].key, p = S.p[S.mode];
+  const d = new Date(); const ts = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  const mono = s => `${Math.round(s * u)}px "JetBrains Mono", ui-monospace, monospace`;
+  hx.textBaseline = "top"; hx.shadowColor = "rgba(0,0,0,.6)"; hx.shadowBlur = 3 * u;
+  const txt = (s, x, y, col, size = 9, align = "left") => { hx.font = mono(size); hx.fillStyle = col; hx.textAlign = align; hx.fillText(s, x, y); };
+  if (m === "thermal") {
+    const tMin = 11.8, tMax = 37.2;
+    const bx = w - 26 * u, by = 70 * u, bh = h - 150 * u, bw = 8 * u;
+    const g = hx.createLinearGradient(0, by + bh, 0, by);
+    const stops = p.b < .34 ? ["#000", "#210061", "#9e0873", "#f55c0d", "#ffd133", "#fff"] : p.b < .67 ? ["#000", "#0033ff", "#00e0ff", "#30ff40", "#ffe000", "#ff2000", "#fff"] : ["#000", "#fff"];
+    stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+    hx.fillStyle = g; hx.fillRect(bx, by, bw, bh);
+    txt(tMax.toFixed(1).replace(".", ",") + " °C", bx + bw, by - 14 * u, "#fff", 9, "right");
+    txt(tMin.toFixed(1).replace(".", ",") + " °C", bx + bw, by + bh + 5 * u, "#fff", 9, "right");
+    const cx = w / 2, cy = h / 2, r = 10 * u;
+    hx.strokeStyle = "#fff"; hx.lineWidth = 1.2 * u; hx.beginPath();
+    hx.moveTo(cx - r * 2, cy); hx.lineTo(cx - r * .6, cy); hx.moveTo(cx + r * .6, cy); hx.lineTo(cx + r * 2, cy);
+    hx.moveTo(cx, cy - r * 2); hx.lineTo(cx, cy - r * .6); hx.moveTo(cx, cy + r * .6); hx.lineTo(cx, cy + r * 2); hx.stroke();
+    const tl = Math.min(1, Math.max(0, (centerL - .5) * (1 + p.a * 4) + .5));
+    txt((tMin + tl * (tMax - tMin)).toFixed(1).replace(".", ",") + " °C", cx + r * 2.4, cy - r * 1.8, "#fff", 11);
+    txt("ИК 8–14 мкм   ε 0,95", 14 * u, h - 40 * u, "rgba(255,255,255,.85)");
+    txt(ts, 14 * u, h - 26 * u, "rgba(255,255,255,.85)");
+  } else if (m === "radar") {
+    const cx = w / 2, cy = h / 2, R = h * .46, col = "rgba(150,240,190,.9)";
+    [["С", 0, -1], ["В", 1, 0], ["Ю", 0, 1], ["З", -1, 0]].forEach(([s, x, y]) => txt(s, cx + x * (R + 10 * u), cy + y * (R + 10 * u) - 5 * u, col, 10, "center"));
+    [60, 120, 180, 240].forEach((km, i) => txt(km + " км", cx + R * (i + 1) / 4 * .707 + 3 * u, cy - R * (i + 1) / 4 * .707 + 2 * u, "rgba(150,240,190,.6)", 7.5));
+    txt("ДОПЛЕРОВСКИЙ МЕТЕОРАДАР · S-ДИАПАЗОН", 14 * u, h - 56 * u, col);
+    txt(p.b < .5 ? "ОТРАЖАЕМОСТЬ, dBZ" : "РАДИАЛЬНАЯ СКОРОСТЬ, м/с", 14 * u, h - 42 * u, col);
+    txt("UTC " + `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`, 14 * u, h - 28 * u, col);
+    const lx = w - 20 * u, ly = h - 30 * u;
+    if (p.b < .5) {
+      const cols = ["#008cc7", "#00d152", "#008026", "#ffe600", "#ff8c00", "#f21a1a", "#d940f2"], vals = [15, 25, 35, 45, 55, 65, 75];
+      cols.forEach((c, i) => { const x = lx - (cols.length - i) * 20 * u; hx.fillStyle = c; hx.fillRect(x, ly, 18 * u, 6 * u); txt(String(vals[i]), x + 9 * u, ly + 8 * u, col, 7, "center"); });
+    } else {
+      const g = hx.createLinearGradient(lx - 140 * u, 0, lx, 0); g.addColorStop(0, "#1fff59"); g.addColorStop(.5, "#000"); g.addColorStop(1, "#ff2e1f");
+      hx.fillStyle = g; hx.fillRect(lx - 140 * u, ly, 140 * u, 6 * u);
+      txt("−30", lx - 140 * u, ly + 8 * u, col, 7); txt("0", lx - 70 * u, ly + 8 * u, col, 7, "center"); txt("+30", lx, ly + 8 * u, col, 7, "right");
+    }
+  } else if (m === "sem") {
+    const bh = 26 * u; hx.shadowBlur = 0;
+    hx.fillStyle = "#000"; hx.fillRect(0, h - bh, w, bh);
+    const mag = Math.round(500 * (1 + p.b * 4));
+    txt(`HV 15,0 kV   WD 8,7 мм   ×${mag.toLocaleString("ru-RU")}   SE   ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}  ${ts}`, 12 * u, h - bh + 9 * u, "#e8e8e8", 8.5);
+    const um = Math.max(1, Math.round(100 / (1 + p.b * 4) / 5) * 5) || 5;
+    const sw = 90 * u; hx.fillStyle = "#fff"; hx.fillRect(w - 14 * u - sw, h - bh + 15 * u, sw, 3 * u);
+    txt(um + " мкм", w - 14 * u - sw / 2, h - bh + 4 * u, "#fff", 8.5, "center");
+  } else if (m === "slit") {
+    txt(`ЩЕЛЕВАЯ РАЗВЁРТКА · Δt ${(p.a * (HN - 2) / 60).toFixed(2).replace(".", ",")} с`, w - 14 * u, 52 * u, "rgba(255,255,255,.7)", 8.5, "right");
+  } else if (m === "mosh") {
+    txt("P-КАДРЫ БЕЗ ОПОРНЫХ · МАКРОБЛОКИ " + Math.round(8 + p.b * 40) + " px", w - 14 * u, 52 * u, "rgba(255,255,255,.7)", 8.5, "right");
+  } else if (m === "moire") {
+    txt(`МУАР · ${Math.round(80 + p.a * 520)} ЛИНИЙ · Δφ ${((p.b * .3 + .015) * 57.3).toFixed(1).replace(".", ",")}°`, w - 14 * u, 52 * u, "rgba(255,255,255,.7)", 8.5, "right");
+  } else if (m === "diff") {
+    txt("ДИФРАКЦИОННАЯ РЕШЁТКА 625 штр/мм · шаг дорожки CD 1,6 мкм", w - 14 * u, 52 * u, "rgba(255,255,255,.7)", 8.5, "right");
+  } else if (m === "crt") {
+    txt("КИНЕСКОП · ТЯНИ МАГНИТ ПО ЭКРАНУ", w - 22 * u, 52 * u, "rgba(255,255,255,.65)", 8.5, "right");
+    txt("AV-1  " + ts, 26 * u, 26 * u, "rgba(120,255,140,.85)", 12);
+  }
+}
+
+/* ---------------- loop ---------------- */
+let last = performance.now(), t = 0, cur = 0, head = 0, sweep = 0, sweepPrev = 0, frameN = 0, seed = 2;
+function draw(p, fb, w, h) { gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.viewport(0, 0, w, h); gl.useProgram(p.p); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+function bindTex(unit, target, tex, loc) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(target, tex); gl.uniform1i(loc, unit); }
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, .1); last = now; t += dt; frameN++;
+  resize();
+  const mode = S.mode, pr = S.p[mode];
+  if (srcKind === "video" && video.readyState >= 2) uploadIn(video);
+  const sA = cur ? T.s1 : T.s0, sB = cur ? T.s0 : T.s1, oA = cur ? T.o1 : T.o0, oB = cur ? T.o0 : T.o1;
+
+  // 1. source -> sA
+  let u = P.src.u; gl.useProgram(P.src.p);
+  bindTex(0, gl.TEXTURE_2D, inTex, u.uIn);
+  const sa = srcW / srcH, ca = W / H;
+  gl.uniform2f(u.uScale, sa > ca ? ca / sa : 1, sa > ca ? 1 : sa / ca);
+  gl.uniform2f(u.uRes, W, H); gl.uniform1f(u.uDemo, srcKind === "demo" ? 1 : 0); gl.uniform1f(u.uTime, t);
+  draw(P.src, sA.fb, W, H);
+
+  // 2. history layer
+  head = (head + 1) % HN;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, T.hfb); gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, T.hist, 0, head);
+  gl.viewport(0, 0, HW, HH); gl.useProgram(P.copy.p); bindTex(0, gl.TEXTURE_2D, sA.tex, P.copy.u.uIn); gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // center reading for thermal
+  if (mode === 0 && frameN % 8 === 0) { const px = new Uint8Array(4); gl.bindFramebuffer(gl.FRAMEBUFFER, sA.fb); gl.readPixels(W >> 1, H >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); centerL = (px[0] * .299 + px[1] * .587 + px[2] * .114) / 255; }
+
+  // 3. effect -> oA
+  sweepPrev = sweep; sweep = (sweep + dt * (.6 + pr.a * 4)) % (Math.PI * 2);
+  if (now > magManual) { const tm = now / 1000; const tx = .5 + .22 * Math.cos(tm * .3), ty = .5 + .18 * Math.sin(tm * .41); mag[0] += (tx - mag[0]) * .02; mag[1] += (ty - mag[1]) * .02; }
+  u = P.fx.u; gl.useProgram(P.fx.p);
+  bindTex(0, gl.TEXTURE_2D, sA.tex, u.uSrc); bindTex(1, gl.TEXTURE_2D, sB.tex, u.uPrev); bindTex(2, gl.TEXTURE_2D, oB.tex, u.uFb); bindTex(3, gl.TEXTURE_2D_ARRAY, T.hist, u.uHist);
+  gl.uniform2f(u.uRes, W, H); gl.uniform2f(u.uMag, mag[0], mag[1]);
+  gl.uniform1f(u.uMode, mode); gl.uniform1f(u.uA, pr.a); gl.uniform1f(u.uB, pr.b); gl.uniform1f(u.uTime, t);
+  gl.uniform1f(u.uHead, head); gl.uniform1f(u.uN, HN); gl.uniform1f(u.uSweep, sweep); gl.uniform1f(u.uSweepPrev, sweepPrev);
+  gl.uniform1f(u.uSeed, seed > 0 ? 1 : 0); if (seed > 0) seed--;
+  draw(P.fx, oA.fb, W, H);
+
+  // 4. HUD
+  if (frameN % 6 === 1 || !drawHud.done) { drawHud(now); drawHud.done = true; gl.bindTexture(gl.TEXTURE_2D, hudTex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hud); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); }
+
+  // 5. screen
+  u = P.out.u; gl.useProgram(P.out.p);
+  bindTex(0, gl.TEXTURE_2D, oA.tex, u.uOut); bindTex(1, gl.TEXTURE_2D, sA.tex, u.uSrc); bindTex(2, gl.TEXTURE_2D, hudTex, u.uHud);
+  gl.uniform2f(u.uRes, W, H); gl.uniform1f(u.uMode, mode); gl.uniform1f(u.uMix, S.mix); gl.uniform1f(u.uB, pr.b); gl.uniform1f(u.uTime, t);
+  gl.uniform1f(u.uSweep, sweep); gl.uniform1f(u.uHudOn, S.hud ? 1 : 0);
+  draw(P.out, null, W, H);
+  if (wantShot) { wantShot = false; canvas.toBlob(b => b && offer(b, `pribor-${MODES[mode].key}.png`), "image/png"); }
+  cur ^= 1;
+  requestAnimationFrame(frame);
+}
+setMode(S.mode);
+resize();
+requestAnimationFrame(frame);
+})();
+</script>
