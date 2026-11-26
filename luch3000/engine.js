@@ -45,8 +45,8 @@ const POST = `#version 300 es
 precision highp float;
 in vec2 vUv; out vec4 o;
 uniform sampler2D uA, uB, uFb; uniform vec2 uRes;
-uniform float uX, uTrail, uZoom, uTwist, uBloom, uChroma, uBeat;
-vec3 pick(vec2 uv){ return mix(texture(uA,uv).rgb, texture(uB,uv).rgb, uX); }
+uniform float uX, uTrail, uZoom, uTwist, uBloom, uChroma, uBeat, uPunch;
+vec3 pick(vec2 uv){ uv=(uv-.5)/(1.+uPunch*.18)+.5; return mix(texture(uA,uv).rgb, texture(uB,uv).rgb, uX); }
 void main(){
   vec2 uv=vUv; vec2 d=(uv-.5)*uChroma*.022*(1.+uBeat*.8);
   vec3 c=vec3(pick(uv+d).r, pick(uv).g, pick(uv-d).b);
@@ -66,16 +66,18 @@ void main(){
 const SCREEN = `#version 300 es
 precision highp float;
 in vec2 vUv; out vec4 o;
-uniform sampler2D uTex; uniform vec2 uRes; uniform float uScan, uTime, uMaster;
+uniform sampler2D uTex; uniform vec2 uRes; uniform float uScan, uTime, uMaster, uInvert, uMirror, uStrobe;
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 void main(){
-  vec3 c=texture(uTex,vUv).rgb;
+  vec2 uv=vUv; if(uMirror>.5) uv.x=uv.x<.5?uv.x:1.-uv.x;
+  vec3 c=texture(uTex,uv).rgb;
+  c=mix(c,vec3(1.)-clamp(c,0.,1.),uInvert);
   float sl=.5+.5*sin(gl_FragCoord.y*3.14159*.5);
   c*=mix(1.,.62+.38*sl,uScan);
   c*=1.+uScan*.04*sin(uTime*50.);
   vec2 d=vUv-.5; c*=1.-dot(d,d)*.6;
   c+=(hash(vUv*uRes+fract(uTime)*37.)-.5)*.014;
-  o=vec4(c*uMaster,1.);
+  o=vec4(c*uMaster*uStrobe,1.);
 }`;
 
 class Engine {
@@ -149,7 +151,7 @@ class Engine {
   _free(t) { if (!t) return; this.gl.deleteTexture(t.tex); this.gl.deleteFramebuffer(t.fb); }
   resize(w, h) {
     if (w === this.W && h === this.H) return;
-    this.W = w; this.H = h; this.canvas.width = w; this.canvas.height = h;
+    this.W = w; this.H = h; this.canvas.width = w; this.canvas.height = h; this.last = null;
     if (this.T) Object.values(this.T).forEach(t => this._free(t));
     this.T = { a: this._target(w, h), b: this._target(w, h), f0: this._target(w, h), f1: this._target(w, h) };
   }
@@ -173,8 +175,9 @@ class Engine {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   /** Draw one frame. a/b: {preset, prog}; x: crossfade 0..1; post: settings of the leading preset. */
-  frame(s, a, b, x, post, scan, master) {
+  frame(s, a, b, x, post, scan, master, fx = {}) {
     const gl = this.gl, T = this.T;
+    if (fx.freeze && this.last) { this._screen(this.last, s, scan, master, fx); return; }
     const fPrev = this.cur ? T.f1 : T.f0, fNext = this.cur ? T.f0 : T.f1;
     this._style(a.prog, T.a, s, a.preset, fPrev.tex);
     if (b && x > 0) this._style(b.prog, T.b, s, b.preset, fPrev.tex);
@@ -182,13 +185,19 @@ class Engine {
     this._bind(0, T.a.tex, u.uA); this._bind(1, (b && x > 0 ? T.b : T.a).tex, u.uB); this._bind(2, fPrev.tex, u.uFb);
     gl.uniform2f(u.uRes, this.W, this.H); gl.uniform1f(u.uX, b ? x : 0);
     gl.uniform1f(u.uTrail, post.trail); gl.uniform1f(u.uZoom, post.zoom); gl.uniform1f(u.uTwist, post.twist);
-    gl.uniform1f(u.uBloom, post.bloom); gl.uniform1f(u.uChroma, post.chroma); gl.uniform1f(u.uBeat, s.beat);
+    gl.uniform1f(u.uBloom, post.bloom); gl.uniform1f(u.uChroma, post.chroma); gl.uniform1f(u.uBeat, s.beat); gl.uniform1f(u.uPunch, fx.punch || 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    u = this.screen.u; gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.W, this.H); gl.useProgram(this.screen.p);
-    this._bind(0, fNext.tex, u.uTex); gl.uniform2f(u.uRes, this.W, this.H);
-    gl.uniform1f(u.uScan, scan); gl.uniform1f(u.uTime, s.realTime); gl.uniform1f(u.uMaster, master);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.last = fNext.tex;
+    this._screen(fNext.tex, s, scan, master, fx);
     this.cur ^= 1;
+  }
+  _screen(tex, s, scan, master, fx) {
+    const gl = this.gl, u = this.screen.u;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.W, this.H); gl.useProgram(this.screen.p);
+    this._bind(0, tex, u.uTex); gl.uniform2f(u.uRes, this.W, this.H);
+    gl.uniform1f(u.uScan, scan); gl.uniform1f(u.uTime, s.realTime); gl.uniform1f(u.uMaster, master);
+    gl.uniform1f(u.uInvert, fx.invert ? 1 : 0); gl.uniform1f(u.uMirror, fx.mirror ? 1 : 0); gl.uniform1f(u.uStrobe, fx.strobe ?? 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   clearFeedback() { const gl = this.gl; if (!this.T) return; for (const t of [this.T.f0, this.T.f1]) { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); } }
   /** Render a still of a style into a 2D canvas (library thumbnails). */
