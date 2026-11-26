@@ -1,0 +1,282 @@
+<title>ЛУЧ-3000</title>
+<link rel="artifact-thumbnail" href="thumb.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jura:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=VT323&display=swap">
+<style>
+/* Layout: the screen is a starship viewport. Thin top status bar, query console on the left, library on the right,
+   instrument deck along the bottom; the centre stays open glass with reticle corners over the live render. */
+:root {
+  --void: #03050a;
+  --hull: rgba(9, 14, 24, 0.78);
+  --hull-deep: rgba(5, 8, 14, 0.9);
+  --edge: rgba(150, 215, 255, 0.2);
+  --edge-hot: rgba(150, 215, 255, 0.55);
+  --ink: #dbe6f2;
+  --ink-dim: #8796a8;
+  --ink-faint: #4f5c6c;
+  --phos: #8ff4ff;          /* phosphor cyan: live values, focus */
+  --amber: #ffb35c;         /* action and warnings */
+  --alert: #ff5d73;
+  --ok: #7dffa8;
+  --chrome-hi: #eef3f8;
+  --chrome-lo: #5b6673;
+  --f-display: "Jura", "IBM Plex Sans", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --f-seg: "VT323", "IBM Plex Mono", ui-monospace, monospace;
+  --cut: 14px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--void); color: var(--ink); font-family: var(--f-body); font-size: 13px; overflow: hidden; }
+#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--void); }
+
+/* ---------- hull grid ---------- */
+.hull {
+  position: fixed; inset: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(12px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 10px) max(12px, env(safe-area-inset-left, 0px));
+  display: grid; gap: 10px;
+  grid-template-columns: 330px minmax(0, 1fr) 286px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "bar bar bar" "query view lib" "deck deck deck";
+  pointer-events: none; transition: opacity .35s ease;
+}
+.hull > * { pointer-events: auto; }
+body.scene .hull { opacity: 0; pointer-events: none; }
+body.scene .hull > * { pointer-events: none; }
+
+.panel, .bar, .module {
+  background: linear-gradient(var(--hull), var(--hull)) padding-box,
+              linear-gradient(160deg, var(--edge-hot), var(--edge) 35%, rgba(255,179,92,.28)) border-box;
+  border: 1px solid transparent;
+  backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  position: relative;
+}
+.panel { clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+.panel::before, .panel::after { content: ""; position: absolute; width: 20px; height: 1px; background: var(--edge-hot); }
+.panel::before { top: 6px; left: -3px; transform: rotate(-45deg); }
+.panel::after { bottom: 6px; right: -3px; transform: rotate(-45deg); }
+.panel { background-image: linear-gradient(var(--hull), var(--hull)), linear-gradient(160deg, var(--edge-hot), var(--edge) 35%, rgba(255,179,92,.28)); }
+.scan-glass { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px); }
+
+/* ---------- top bar ---------- */
+.bar { grid-area: bar; border-radius: 999px; display: flex; align-items: center; gap: 18px; padding: 7px 10px 7px 8px; min-width: 0; }
+.logo { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.logo .mark { width: 26px; height: 26px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--phos) 22%, #1b6c8f 55%, #06121e 72%);
+  box-shadow: 0 0 14px rgba(143,244,255,.55), inset 0 0 0 1px rgba(255,255,255,.4); }
+.logo b { font-family: var(--f-display); font-weight: 700; font-size: 15px; letter-spacing: .2em; }
+.logo small { font-family: var(--f-mono); font-size: 10px; color: var(--ink-dim); letter-spacing: .04em; }
+.ticker { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-weight: 600; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--phos); overflow: hidden; white-space: nowrap; }
+.ticker span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); box-shadow: inset 0 1px 1px rgba(255,255,255,.4); flex: none; }
+.led.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.led.busy { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: blink .8s steps(2) infinite; }
+.led.err { background: var(--alert); box-shadow: 0 0 8px var(--alert); }
+@keyframes blink { 50% { opacity: .3; } }
+.readouts { display: flex; align-items: baseline; gap: 8px; padding: 2px 14px; border-radius: 999px; background: rgba(0,0,0,.45); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), inset 0 0 0 1px rgba(143,244,255,.12); }
+.seg { font-family: var(--f-seg); font-size: 22px; line-height: 1; color: var(--phos); text-shadow: 0 0 8px rgba(143,244,255,.6); font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+.seg-l { font-family: var(--f-mono); font-size: 9px; color: var(--ink-faint); letter-spacing: .1em; }
+
+/* ---------- panel headers ---------- */
+.ph { display: flex; justify-content: space-between; align-items: center; padding: 11px 16px 9px 22px; border-bottom: 1px solid var(--edge); }
+.ph span { font-family: var(--f-display); font-weight: 700; font-size: 12px; letter-spacing: .24em; }
+.ph i { font-style: normal; font-family: var(--f-mono); font-size: 10px; color: var(--ink-faint); }
+.ph.sub { border-top: 1px solid var(--edge); margin-top: 4px; }
+.pbody { padding: 12px 16px 14px; display: grid; gap: 10px; }
+
+/* ---------- query ---------- */
+.query { grid-area: query; display: flex; flex-direction: column; min-height: 0; }
+.modeswitch { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 999px; background: rgba(0,0,0,.5); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), inset 0 0 0 1px rgba(143,244,255,.1); }
+.modeswitch button { font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; padding: 7px 6px; border-radius: 999px; border: 0; background: transparent; color: var(--ink-dim); cursor: pointer; }
+.modeswitch button[aria-selected="true"] { color: #04121c; background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.1) 50%, transparent 52%), linear-gradient(180deg, #b9f8ff, #43bfd6); box-shadow: 0 0 12px rgba(143,244,255,.4); }
+.mode-note { margin: 0; font-size: 11.5px; color: var(--ink-dim); line-height: 1.5; }
+.term { position: relative; border-radius: 10px; background: rgba(0,6,10,.7); box-shadow: inset 0 0 0 1px rgba(143,244,255,.16), inset 0 2px 12px rgba(0,0,0,.8); }
+.term::before { content: "›"; position: absolute; left: 10px; top: 8px; color: var(--phos); font-family: var(--f-mono); font-size: 15px; }
+.term textarea { width: 100%; min-height: 88px; resize: vertical; border: 0; background: transparent; color: var(--ink); font-family: var(--f-mono); font-size: 12.5px; line-height: 1.55; padding: 9px 12px 9px 26px; outline: none; caret-color: var(--phos); }
+.term textarea::placeholder { color: var(--ink-faint); }
+.term:focus-within { box-shadow: inset 0 0 0 1px var(--phos), 0 0 14px rgba(143,244,255,.25); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hint { font-family: var(--f-mono); font-size: 10px; color: var(--ink-faint); }
+
+.aqua {
+  font-family: var(--f-display); font-weight: 700; font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase; color: #eaf6ff;
+  border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer; position: relative;
+  background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 46%, rgba(0,0,0,0) 54%), linear-gradient(180deg, #34597e, #13263c);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -3px 6px rgba(143,244,255,.25), 0 0 0 1px rgba(0,0,0,.7), 0 3px 10px rgba(0,0,0,.5);
+}
+.aqua:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 -3px 8px rgba(143,244,255,.45), 0 0 0 1px rgba(143,244,255,.5), 0 0 16px rgba(143,244,255,.25); }
+.aqua.primary { color: #2a1400; background: linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,.12) 46%, rgba(0,0,0,0) 54%), linear-gradient(180deg, #ffd08a, #e07a12); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), inset 0 -3px 8px rgba(255,240,200,.5), 0 0 0 1px rgba(60,25,0,.8), 0 0 18px rgba(255,179,92,.35); }
+.aqua.small { padding: 6px 11px; font-size: 10px; letter-spacing: .12em; }
+.aqua.rec.on { color: #fff; background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 46%, transparent 54%), linear-gradient(180deg, #ff7a8a, #b0102a); }
+.aqua[disabled] { opacity: .4; cursor: default; }
+.aqua:focus-visible, .modeswitch button:focus-visible, .tabs button:focus-visible, .card:focus-visible, .knob:focus-visible { outline: 2px solid var(--phos); outline-offset: 2px; }
+
+.qscroll { overflow-y: auto; min-height: 0; flex: 1; }
+.variants { display: grid; gap: 8px; }
+.vcard { display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 10px; align-items: center; padding: 6px; border-radius: 10px; background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1px rgba(143,244,255,.1); cursor: pointer; text-align: left; color: inherit; border: 0; font: inherit; }
+.vcard:hover { box-shadow: inset 0 0 0 1px var(--phos); }
+.vcard img, .vcard .ph-img { width: 96px; height: 54px; border-radius: 6px; object-fit: cover; display: block; background: #000; }
+.vcard b { font-family: var(--f-display); font-weight: 700; font-size: 13px; letter-spacing: .04em; display: block; }
+.vcard small { font-size: 11px; color: var(--ink-dim); line-height: 1.4; display: block; }
+.vcard em { font-style: normal; font-family: var(--f-mono); font-size: 9.5px; color: var(--phos); letter-spacing: .06em; }
+.log { list-style: none; margin: 0; padding: 8px 16px 14px 22px; font-family: var(--f-mono); font-size: 10.5px; line-height: 1.6; color: var(--ink-dim); display: grid; gap: 2px; }
+.log li { overflow-wrap: anywhere; }
+.log time { color: var(--ink-faint); margin-right: 6px; }
+.log .ok { color: var(--ok); } .log .warn { color: var(--amber); } .log .err { color: var(--alert); } .log .ai { color: var(--phos); }
+
+/* ---------- viewport reticle ---------- */
+.view { grid-area: view; position: relative; pointer-events: none; }
+.view i { position: absolute; width: 22px; height: 22px; border-color: rgba(143,244,255,.4); border-style: solid; }
+.view i:nth-child(1) { left: 0; top: 0; border-width: 1px 0 0 1px; }
+.view i:nth-child(2) { right: 0; top: 0; border-width: 1px 1px 0 0; }
+.view i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 1px 1px; }
+.view i:nth-child(4) { right: 0; bottom: 0; border-width: 0 1px 1px 0; }
+.view .vlabel { position: absolute; left: 30px; top: 3px; font-family: var(--f-mono); font-size: 9.5px; color: rgba(143,244,255,.6); letter-spacing: .12em; }
+
+/* ---------- library ---------- */
+.lib { grid-area: lib; display: flex; flex-direction: column; min-height: 0; }
+.tabs { display: flex; gap: 4px; padding: 10px 16px 0 22px; }
+.tabs button { flex: 1; font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: 7px; border-radius: 8px 8px 0 0; border: 1px solid var(--edge); border-bottom: 0; background: transparent; color: var(--ink-dim); cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--phos); background: rgba(143,244,255,.08); border-color: var(--edge-hot); }
+.grid { overflow-y: auto; min-height: 0; flex: 1; padding: 10px 14px 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; border-top: 1px solid var(--edge-hot); }
+.card { position: relative; border: 0; padding: 0; border-radius: 8px; overflow: hidden; cursor: pointer; background: #000; color: inherit; font: inherit; text-align: left; box-shadow: inset 0 0 0 1px rgba(143,244,255,.12); aspect-ratio: 16 / 10; max-width: 100%; }
+.card img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .9; }
+.card .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 7px 5px; background: linear-gradient(transparent, rgba(0,0,0,.85)); font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .04em; display: flex; gap: 5px; align-items: baseline; }
+.card .cap kbd { font-family: var(--f-seg); font-size: 14px; color: var(--phos); }
+.card .badge { position: absolute; top: 5px; right: 5px; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .08em; padding: 2px 5px; border-radius: 4px; background: rgba(255,179,92,.9); color: #261200; }
+.card.live { box-shadow: inset 0 0 0 2px var(--phos), 0 0 14px rgba(143,244,255,.35); }
+.card:hover img { opacity: 1; }
+.empty { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-dim); line-height: 1.55; padding: 8px 2px; }
+
+/* ---------- deck ---------- */
+.deck { grid-area: deck; display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 2fr) auto minmax(0, 1.1fr) auto; gap: 10px; }
+.module { border-radius: 12px; padding: 9px 12px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mh { font-family: var(--f-display); font-weight: 700; font-size: 10.5px; letter-spacing: .2em; color: var(--ink-dim); display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+.mh b { color: var(--phos); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.knobs { display: flex; gap: 6px; flex-wrap: wrap; }
+.knob { display: grid; justify-items: center; gap: 1px; width: 62px; cursor: ns-resize; user-select: none; touch-action: none; border-radius: 8px; }
+.knob svg { width: 50px; height: 50px; display: block; overflow: visible; }
+.knob .kv { font-family: var(--f-seg); font-size: 16px; line-height: 1; color: var(--phos); text-shadow: 0 0 6px rgba(143,244,255,.5); }
+.knob .kl { font-size: 9.5px; color: var(--ink-dim); text-align: center; line-height: 1.2; max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swatches { display: grid; grid-template-columns: repeat(2, 34px); gap: 6px; }
+.swatch { width: 34px; height: 34px; border-radius: 8px; overflow: hidden; position: relative; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 0 10px rgba(0,0,0,.6); }
+.swatch input { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); border: 0; padding: 0; cursor: pointer; background: none; }
+.swatch::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(255,255,255,.35), transparent 45%); }
+#scope { width: 100%; height: 54px; display: block; border-radius: 8px; background: rgba(0,8,4,.8); box-shadow: inset 0 0 0 1px rgba(125,255,168,.18); }
+.src { font-family: var(--f-mono); font-size: 10px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.master-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+.toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 66px); transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; background: var(--hull-deep); box-shadow: inset 0 0 0 1px var(--edge-hot); font-family: var(--f-mono); font-size: 11.5px; color: var(--phos); opacity: 0; transition: opacity .25s; pointer-events: none; max-width: calc(100vw - 32px); text-align: center; z-index: 5; }
+.toast.show { opacity: 1; }
+.scene-hint { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); font-family: var(--f-mono); font-size: 10px; color: rgba(143,244,255,.35); opacity: 0; transition: opacity .4s; pointer-events: none; }
+body.scene .scene-hint { opacity: 1; }
+.fail { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-dim); font-family: var(--f-mono); }
+.mobtabs { display: none; }
+
+/* ---------- narrow screens: one panel at a time ---------- */
+@media (max-width: 1100px) {
+  .hull { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "bar" "view" "mob"; }
+  .query, .lib, .deck { grid-area: view; display: none; max-height: 100%; }
+  body[data-pane="query"] .query, body[data-pane="lib"] .lib { display: flex; }
+  body[data-pane="deck"] .deck { display: grid; grid-template-columns: minmax(0,1fr); overflow-y: auto; align-content: end; }
+  .view { display: none; }
+  body[data-pane="none"] .view { display: block; }
+  .mobtabs { grid-area: mob; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mobtabs .aqua { padding: 9px 4px; font-size: 10px; letter-spacing: .08em; }
+  .mobtabs .aqua[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--phos), 0 0 14px rgba(143,244,255,.35); color: var(--phos); }
+  .readouts .hide-narrow, .logo small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .hull, .toast { transition: none; } .led.busy { animation: none; } }
+</style>
+
+<canvas id="stage" aria-label="Живой визуал"></canvas>
+
+<div class="hull" id="hull">
+  <header class="bar">
+    <div class="logo"><span class="mark" aria-hidden="true"></span><b>ЛУЧ-3000</b><small>визуальный синтезатор · борт 07</small></div>
+    <div class="ticker"><span class="led" id="ledAI" title="Связь с ИИ"></span><span id="nowPlaying">ПРОГРЕВ СИСТЕМ</span></div>
+    <div class="readouts">
+      <span class="seg" id="clock">00:00:00</span>
+      <span class="seg-l hide-narrow">КАДР/С</span><span class="seg hide-narrow" id="fps">--</span>
+      <span class="seg-l">BPM</span><span class="seg" id="bpm">---</span>
+    </div>
+  </header>
+
+  <section class="panel query" aria-label="Запрос">
+    <div class="scan-glass"></div>
+    <div class="ph"><span>ЗАПРОС</span><i>MOD-01 // ИИ</i></div>
+    <div class="qscroll">
+      <div class="pbody">
+        <div class="modeswitch" role="tablist" aria-label="Режим запроса">
+          <button role="tab" id="modePick" aria-selected="true" type="button">Подобрать</button>
+          <button role="tab" id="modeForge" aria-selected="false" type="button">Создать стиль</button>
+        </div>
+        <p class="mode-note" id="modeNote"></p>
+        <div class="term"><textarea id="prompt" aria-label="Описание визуала" placeholder="луна сквозь лёд, медленно, холодный свет, на дропе трещины"></textarea></div>
+        <div class="row">
+          <button class="aqua primary" id="synthBtn" type="button">Синтез</button>
+          <span class="hint">Ctrl / ⌘ + Enter</span>
+        </div>
+        <div class="variants" id="variants"></div>
+      </div>
+      <div class="ph sub"><span>БОРТЖУРНАЛ</span><i>LOG</i></div>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </div>
+  </section>
+
+  <div class="view" aria-hidden="true"><i></i><i></i><i></i><i></i><span class="vlabel" id="vlabel">ИЛЛЮМИНАТОР · ВЫХОД 1</span></div>
+
+  <section class="panel lib" aria-label="Библиотека">
+    <div class="scan-glass"></div>
+    <div class="ph"><span>БИБЛИОТЕКА</span><i id="libCount">--</i></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabStyles" aria-selected="true" type="button">Стили</button>
+      <button role="tab" id="tabPresets" aria-selected="false" type="button">Пресеты</button>
+    </div>
+    <div class="grid" id="libGrid"></div>
+  </section>
+
+  <section class="deck" aria-label="Пульт">
+    <div class="module"><div class="mh">СТИЛЬ <b id="styleName">—</b></div><div class="knobs" id="styleKnobs"></div></div>
+    <div class="module"><div class="mh">ОПТИКА</div><div class="knobs" id="postKnobs"></div></div>
+    <div class="module"><div class="mh">ПАЛИТРА</div><div class="swatches" id="swatches"></div></div>
+    <div class="module">
+      <div class="mh">СИГНАЛ</div>
+      <canvas id="scope" width="440" height="108"></canvas>
+      <div class="row">
+        <label class="aqua small" for="audioFile" style="cursor:pointer">Трек</label>
+        <input type="file" id="audioFile" accept="audio/*" hidden>
+        <button class="aqua small" id="playBtn" type="button" disabled>Пуск</button>
+        <button class="aqua small" id="demoBtn" type="button">Демо</button>
+      </div>
+      <div class="src" id="trackName">демо-сигнал · 124 BPM · без звука</div>
+    </div>
+    <div class="module">
+      <div class="mh">ВЫХОД</div>
+      <div class="knobs" id="masterKnobs"></div>
+      <div class="master-btns">
+        <button class="aqua small" id="sceneBtn" type="button">Сцена</button>
+        <button class="aqua small" id="saveBtn" type="button">В пресеты</button>
+        <button class="aqua small" id="shotBtn" type="button">Кадр</button>
+        <button class="aqua small rec" id="recBtn" type="button">● Запись</button>
+      </div>
+    </div>
+  </section>
+
+  <nav class="mobtabs" aria-label="Разделы">
+    <button class="aqua" data-pane="query" type="button">Запрос</button>
+    <button class="aqua" data-pane="lib" type="button">Библиотека</button>
+    <button class="aqua" data-pane="deck" type="button">Пульт</button>
+    <button class="aqua" data-pane="none" type="button">Экран</button>
+  </nav>
+</div>
+<div class="scene-hint">S — пульт · ← → стили · 1–9 · B затемнение · F экран</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="styles.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
