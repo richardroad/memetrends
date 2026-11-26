@@ -149,6 +149,9 @@ body.scene .hull > * { pointer-events: none; }
 /* ---------- modulation ---------- */
 .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .chip { position: relative; overflow: hidden; display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; border: 0; cursor: pointer; font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .06em; color: var(--ink); background: rgba(0,0,0,.4); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
+.chip.era { display: grid; gap: 1px; justify-content: start; }
+.chip.era small { font-family: var(--f-mono); font-weight: 400; font-size: 9px; letter-spacing: 0; color: var(--ink-faint); }
+.chip.era[aria-pressed="true"] { animation: none; box-shadow: inset 0 0 0 1px var(--phos), 0 0 10px color-mix(in srgb, var(--phos) 30%, transparent); color: var(--phos); }
 .chip .bar-fill { position: absolute; left: 0; bottom: 0; height: 2px; width: calc(var(--v, 0) * 100%); background: var(--mod); box-shadow: 0 0 6px var(--mod); }
 .chip i { font-style: normal; font-family: var(--f-seg); font-size: 15px; color: var(--mod); }
 .chip[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--mod), 0 0 12px color-mix(in srgb, var(--mod) 40%, transparent); color: var(--mod); animation: blink 1s steps(2) infinite; }
@@ -185,7 +188,7 @@ body.scene .hull > * { pointer-events: none; }
 .tabs button { flex: 1; font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; padding: 7px; border-radius: 8px 8px 0 0; border: 1px solid var(--edge); border-bottom: 0; background: transparent; color: var(--ink-dim); cursor: pointer; }
 .tabs button[aria-selected="true"] { color: var(--phos); background: color-mix(in srgb, var(--phos) 8%, transparent); border-color: var(--edge-hot); }
 .grid { overflow-y: auto; min-height: 0; flex: 1; padding: 10px 14px 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; border-top: 1px solid var(--edge-hot); }
-.card { position: relative; border: 0; padding: 0; border-radius: 8px; overflow: hidden; cursor: pointer; background: #000; color: inherit; font: inherit; text-align: left; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--phos) 12%, transparent); aspect-ratio: 16 / 10; max-width: 100%; }
+.card { position: relative; border: 0; padding: 0; border-radius: 8px; overflow: hidden; cursor: pointer; background: #000; color: inherit; font: inherit; text-align: left; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--phos) 12%, transparent); height: 78px; max-width: 100%; }
 .card img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .9; }
 .card .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 7px 5px; background: linear-gradient(transparent, rgba(0,0,0,.85)); font-family: var(--f-display); font-weight: 700; font-size: 11px; letter-spacing: .04em; display: flex; gap: 5px; align-items: baseline; color: #fff; }
 .card .cap kbd { font-family: var(--f-seg); font-size: 14px; color: var(--phos); }
@@ -288,7 +291,7 @@ body.scene .scene-hint { opacity: 1; }
 
   <section class="panel query" aria-label="Запрос и модуляция">
     <div class="scan-glass"></div>
-    <div class="ph"><div class="ptabs" role="tablist"><button role="tab" id="ptQuery" aria-selected="true" type="button">Запрос</button><button role="tab" id="ptMod" aria-selected="false" type="button">Модуляция</button></div><i>MOD-01</i></div>
+    <div class="ph"><div class="ptabs" role="tablist"><button role="tab" id="ptQuery" aria-selected="true" type="button">Запрос</button><button role="tab" id="ptMod" aria-selected="false" type="button">Модуляция</button><button role="tab" id="ptEpoch" aria-selected="false" type="button">Эпоха</button></div><i>MOD-01</i></div>
 
     <div class="qscroll" id="paneQuery">
       <div class="pbody">
@@ -298,7 +301,7 @@ body.scene .scene-hint { opacity: 1; }
         </div>
         <p class="mode-note" id="modeNote"></p>
         <div class="term"><textarea id="prompt" aria-label="Описание визуала" placeholder="луна сквозь лёд, медленно, холодный свет, на дропе трещины"></textarea></div>
-        <div class="row"><button class="aqua primary" id="synthBtn" type="button">Синтез</button><span class="hint">Ctrl / ⌘ + Enter</span></div>
+        <div class="row"><button class="aqua primary" id="synthBtn" type="button">Синтез</button><button class="aqua" id="chanceBtn" type="button" title="Случайная комбинация стиля, эпохи, знаков и палитры">Случай</button><span class="hint">Ctrl / ⌘ + Enter</span></div>
         <div class="variants" id="variants"></div>
       </div>
       <div class="ph sub"><span>БОРТЖУРНАЛ</span><i>LOG</i></div>
@@ -317,6 +320,19 @@ body.scene .scene-hint { opacity: 1; }
         <div class="sublabel">СВЯЗИ <b id="routeCount" class="hint">0</b></div>
         <div class="routes" id="routes"></div>
         <p class="hint" id="routeHint">Связи принадлежат пресету и сохраняются вместе с ним. ИИ-режиссёр тоже их предлагает.</p>
+      </div>
+    </div>
+
+    <div class="qscroll" id="paneEpoch" hidden>
+      <div class="pbody">
+        <div class="sublabel">ЛИНЗА ЭПОХИ <span class="hint">перерисовывает любой стиль</span></div>
+        <div class="chips" id="lensSel"></div>
+        <div class="knobs" id="lensKnobs"></div>
+        <div class="sublabel">СИМВОЛИКА</div>
+        <div class="chips" id="symSel"></div>
+        <div class="seg-switch tiny" id="symMode"></div>
+        <div class="knobs" id="symKnobs"></div>
+        <p class="hint">Линза и знаки принадлежат пресету, их можно модулировать звуком. ИИ-режиссёр комбинирует эпохи сам.</p>
       </div>
     </div>
   </section>
@@ -345,6 +361,7 @@ body.scene .scene-hint { opacity: 1; }
         <input type="file" id="audioFile" accept="audio/*" hidden>
         <button class="aqua small" id="playBtn" type="button" disabled>Пуск</button>
         <button class="aqua small" id="demoBtn" type="button">Демо</button>
+        <button class="aqua small" id="micBtn" type="button" title="Микрофон или линейный вход звуковой карты">Вход</button>
       </div>
       <div class="src" id="trackName">демо-сигнал · 124 BPM · без звука</div>
     </div>
@@ -389,7 +406,7 @@ body.scene .scene-hint { opacity: 1; }
     <button class="aqua" data-pane="none" type="button">Экран</button>
   </nav>
 </div>
-<div class="scene-hint">S пульт · ← → · 1–9 · B затемнение · F экран · T тап · Q W E R A D эффекты</div>
+<div class="scene-hint">S пульт · ← → · 1–9 · B затемнение · F экран · T тап · Q W E R A D Z X C эффекты</div>
 <div class="toast" id="toast" role="status"></div>
 
 <script src="skins.js"></script>

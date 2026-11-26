@@ -10,6 +10,34 @@ const POST_KEYS = [["trail", "Шлейф"], ["zoom", "Зум"], ["twist", "Вр�
 const DEFAULT_POST = { trail: .3, zoom: .5, twist: .5, bloom: .5, chroma: .2, scan: .25 };
 const SOURCES = [["bass", "Бас"], ["mid", "Середина"], ["high", "Верх"], ["level", "Уровень"], ["beat", "Бит"], ["bar", "Фаза такта"], ["lfo1", "LFO 1"], ["lfo2", "LFO 2"], ["rand", "Случай"], ["onset", "Атака"]];
 const SRC_NAME = Object.fromEntries(SOURCES);
+const LENSES = [
+  ["none", "Без линзы", "чистый стиль"], ["ascii", "ASCII", "терминалы 1970-х"], ["pixel", "8 бит", "приставки 1980-х"], ["halftone", "Растр", "поп-арт 1960-х"],
+  ["stained", "Витраж", "готика XIII века"], ["mosaic", "Смальта", "Византия VI века"], ["engraving", "Гравюра", "XVI век"], ["vhs", "VHS", "1990-е"],
+  ["film", "Кинохроника", "1920-е"], ["pointil", "Пуантилизм", "1880-е"], ["thermal", "Тепловизор", "научная съёмка"], ["neon", "Неон-контур", "1980-е"],
+];
+const LENS_IDX = Object.fromEntries(LENSES.map((l, i) => [l[0], i]));
+const SYMBOL_SETS = [
+  ["runes", "Руны", "эпоха викингов", "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ"],
+  ["alchemy", "Алхимия", "Средневековье", "☉☽☿♀♁♂♃♄♅♆♇△▽⊕⊗☊☋✶"],
+  ["zodiac", "Зодиак", "античность", "♈︎♉︎♊︎♋︎♌︎♍︎♎︎♏︎♐︎♑︎♒︎♓︎"],
+  ["geometry", "Геометрия", "сакральные знаки", "◯△▽◇□☆✶✷✸✹❂⊙⊚✡✦✧⌘❖✺✵"],
+  ["katakana", "Катакана", "Токио 1980-х", "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワン"],
+  ["slavonic", "Азбука", "старославянская", "АБВГДЕЖЅЗИІКЛМНОПРСТУФХѠЦЧШЩЪЫЬѢЮꙖѦѪѮѰѲѴ"],
+  ["binary", "Машинный код", "1970-е", "01ABCDEF▓▒░█▄▀■□▪▫◘◙⌂"],
+  ["luch", "Борт-3000", "знаки систем", "⏚⌁⌖⌗⌘⌬⍟⎈⎉⎊⏣⏥⟁⟐⧫◬◭◮⊛⊜"],
+];
+const SYM_MODES = [["0", "выкл"], ["1", "дождь"], ["2", "орбита"], ["3", "сетка"], ["4", "знак"]];
+const ERA_PALETTES = [
+  ["Конструктивизм 1920", ["#0b0907", "#a3121b", "#d8cdb3", "#fffaf0"]], ["Византийское золото", ["#05060f", "#1d2b6b", "#c9932e", "#fff1c2"]],
+  ["Укиё-э индиго", ["#03070d", "#1b3a5c", "#7fa7c4", "#f2ead8"]], ["Поп-арт 1960", ["#050505", "#ff1f5a", "#00b4d8", "#ffe600"]],
+  ["Психоделия 1967", ["#120018", "#ff5e00", "#c724b1", "#f9f871"]], ["Неон 1984", ["#04000a", "#ff2a9d", "#00e5ff", "#fefefe"]],
+  ["Оп-арт", ["#000000", "#1a1a1a", "#d8d8d8", "#ffffff"]], ["Тушь и бумага", ["#020202", "#2b2b2b", "#9a948a", "#f0e9dc"]],
+  ["Советская мозаика", ["#06070a", "#b3261e", "#e0a43a", "#e9e4d6"]], ["Готический витраж", ["#020208", "#7a0a1f", "#1f4fd1", "#ffd86b"]],
+  ["Аврора", ["#000308", "#00553a", "#3dffb0", "#e6d0ff"]], ["Вапорвейв", ["#0b0221", "#7b2cbf", "#ff71ce", "#01cdfe"]],
+  ["Ледяной", ["#020409", "#1c2c44", "#9fc4e8", "#f4f9ff"]], ["Огонь", ["#0a0200", "#7a1300", "#ff6a00", "#ffe2a8"]],
+];
+const LOOK_KEYS = [["lensAmt", "Сила линзы", 1], ["lensP", "Масштаб", .5], ["symAmt", "Яркость знаков", .8], ["symSize", "Размер знаков", .35], ["symDen", "Плотность", .5]];
+const DEFAULT_LOOK = { lens: "none", sym: "runes", symMode: 0, lensAmt: 1, lensP: .5, symAmt: .8, symSize: .35, symDen: .5 };
 
 /* ================= engine ================= */
 let E;
@@ -38,7 +66,12 @@ LUCH_STYLES.forEach(s => styles.set(s.id, { ...s, builtin: true }));
 let userPresets = [];
 function hexToRGB(h) { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || "").trim()); if (!m) return [0, 0, 0]; const n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
 function okHex(h, fb) { return /^#[0-9a-f]{6}$/i.test(String(h || "").trim()) ? String(h).trim().toLowerCase() : fb; }
-const TARGETS = [...Array.from({ length: 8 }, (_, i) => "p" + i), ...POST_KEYS.map(k => k[0])];
+const TARGETS = [...Array.from({ length: 8 }, (_, i) => "p" + i), ...POST_KEYS.map(k => k[0]), ...LOOK_KEYS.map(k => k[0])];
+function cleanLook(o = {}, d = {}) {
+  const L = { ...DEFAULT_LOOK, ...d, ...o };
+  return { lens: LENS_IDX[L.lens] !== undefined ? L.lens : "none", sym: SYMBOL_SETS.some(x => x[0] === L.sym) ? L.sym : "runes", symMode: Math.max(0, Math.min(4, Math.round(+L.symMode || 0))),
+    lensAmt: clamp01(L.lensAmt), lensP: clamp01(L.lensP), symAmt: clamp01(L.symAmt), symSize: clamp01(L.symSize), symDen: clamp01(L.symDen) };
+}
 function cleanMods(mods, style) {
   return (Array.isArray(mods) ? mods : []).map(m => ({ src: String(m?.src ?? m?.source ?? ""), dst: String(m?.dst ?? m?.target ?? ""), amt: Math.max(-1, Math.min(1, +(m?.amt ?? m?.amount ?? 0) || 0)) }))
     .filter(m => SRC_NAME[m.src] && TARGETS.includes(m.dst) && (m.dst[0] !== "p" || m.dst.length !== 2 || +m.dst[1] < style.params.length) && m.amt !== 0).slice(0, 12);
@@ -50,6 +83,7 @@ function makePreset(style, o = {}) {
     palette: Array.from({ length: 4 }, (_, i) => okHex(o.palette?.[i], style.palette?.[i] || "#000000")),
     post: Object.fromEntries(POST_KEYS.map(([k]) => [k, clamp01(o.post?.[k] ?? style.post?.[k] ?? DEFAULT_POST[k])])),
     mods: cleanMods(o.mods ?? style.mods, style),
+    look: cleanLook(o.look, style.look),
     note: o.note || "", prompt: o.prompt || "", seed: o.seed ?? Math.floor(Math.random() * 1000),
   };
   return withRGB(p);
@@ -103,7 +137,7 @@ const Store = {
     const id = "u_" + Date.now().toString(36); styles.set(id, { ...doc, id }); this.saveLocal(); renderLibrary(); return id;
   },
   async addPreset(p) {
-    const doc = { name: p.name, style: p.style, params: p.params, palette: p.palette, post: p.post, mods: p.mods || [], note: p.note || "", prompt: p.prompt || "", seed: p.seed || 0, createdAt: Date.now() };
+    const doc = { name: p.name, style: p.style, params: p.params, palette: p.palette, post: p.post, mods: p.mods || [], look: p.look || DEFAULT_LOOK, note: p.note || "", prompt: p.prompt || "", seed: p.seed || 0, createdAt: Date.now() };
     if (this.mode === "db") {
       try { await this.db.collection("presets").add(doc); return true; }
       catch (e) { log("Не сохранил пресет в базу (" + (e && e.code) + "), оставил в браузере.", "warn"); }
@@ -118,7 +152,7 @@ function compile(preset) {
   const st = styles.get(preset.style); if (!st) { log("Стиль «" + preset.style + "» не найден.", "err"); return null; }
   const prog = E.program(st);
   if (prog.error) { log("Стиль «" + st.name + "» не компилируется: " + String(prog.error).split("\n")[0], "err"); return null; }
-  return { preset, prog, style: st, eff: { params: preset.params.slice(), post: { ...preset.post }, palRGB: preset.palRGB, seed: preset.seed } };
+  return { preset, prog, style: st, eff: { params: preset.params.slice(), post: { ...preset.post }, look: { ...preset.look }, palRGB: preset.palRGB, seed: preset.seed } };
 }
 function commit(slot) {
   if (!live.a || live.xDur < .05) { live.a = slot; live.b = null; live.x = 0; }
@@ -216,6 +250,7 @@ function bindDeck() {
   styleKnobs.forEach((k, i) => { const p = s.style.params[i]; k.el.hidden = !p; if (p) k.set(s.preset.params[i], p.name, p.def); });
   POST_KEYS.forEach(([k]) => knobs[k].set(s.preset.post[k], undefined, s.style.post?.[k] ?? DEFAULT_POST[k]));
   swatchInputs.forEach((inp, i) => inp.value = s.preset.palette[i]);
+  Epoch.bind(s.preset.look);
   Mod.renderRoutes();
 }
 
@@ -229,25 +264,44 @@ const A = {
 };
 $("audioFile").addEventListener("change", () => {
   const f = $("audioFile").files && $("audioFile").files[0]; if (!f) return;
-  if (!A.ctx) {
-    A.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    A.an = A.ctx.createAnalyser(); A.an.fftSize = 2048; A.an.smoothingTimeConstant = .55;
-    A.fbuf = new Uint8Array(A.an.frequencyBinCount); A.tbuf = new Uint8Array(A.an.fftSize); A.prev = new Uint8Array(512);
-    A.el = new Audio(); A.el.loop = true;
-    A.ctx.createMediaElementSource(A.el).connect(A.an); A.an.connect(A.ctx.destination);
-    A.el.addEventListener("play", () => $("playBtn").textContent = "Пауза");
-    A.el.addEventListener("pause", () => $("playBtn").textContent = "Пуск");
-  }
+  ensureCtx(); stopMic();
   if (A.el.src) URL.revokeObjectURL(A.el.src);
   A.el.src = URL.createObjectURL(f); $("trackName").textContent = f.name; $("playBtn").disabled = false;
   A.ctx.resume(); A.el.play().catch(() => {}); A.intervals = []; Clock.source = "auto"; log("Сигнал: " + f.name, "ok");
 });
 const togglePlay = () => { if (!A.el || !A.el.src) return; A.ctx.resume(); A.el.paused ? A.el.play() : A.el.pause(); };
+function ensureCtx() {
+  if (A.ctx) return;
+  A.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  A.an = A.ctx.createAnalyser(); A.an.fftSize = 2048; A.an.smoothingTimeConstant = .55;
+  A.fbuf = new Uint8Array(A.an.frequencyBinCount); A.tbuf = new Uint8Array(A.an.fftSize);
+  A.el = new Audio(); A.el.loop = true;
+  A.ctx.createMediaElementSource(A.el).connect(A.an); A.an.connect(A.ctx.destination);
+  A.el.addEventListener("play", () => $("playBtn").textContent = "Пауза");
+  A.el.addEventListener("pause", () => $("playBtn").textContent = "Пуск");
+}
+function stopMic() { if (!A.mic) return; A.mic.getTracks().forEach(t => t.stop()); A.mic = null; A.micNode?.disconnect(); A.micNode = null; try { A.an.connect(A.ctx.destination); } catch (e) {} $("micBtn").classList.remove("on"); }
+$("micBtn").addEventListener("click", async () => {
+  if (A.mic) { stopMic(); $("trackName").textContent = "вход выключен · демо-сигнал"; return; }
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("none");
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    ensureCtx(); A.ctx.resume(); if (A.el) A.el.pause();
+    A.mic = stream; A.micNode = A.ctx.createMediaStreamSource(stream);
+    try { A.an.disconnect(); } catch (e) {}
+    A.micNode.connect(A.an);
+    $("micBtn").classList.add("on"); $("trackName").textContent = "вход: " + (stream.getAudioTracks()[0]?.label || "микрофон"); Clock.source = "auto"; A.intervals = [];
+    log("Живой вход подключён: " + (stream.getAudioTracks()[0]?.label || "микрофон"), "ok");
+  } catch (e) {
+    toast("Микрофон в этом окне закрыт");
+    log("Живой вход недоступен: окно claude.ai не даёт микрофон. Открой ЛУЧ-3000 отдельным файлом в Chrome (см. README).", "warn");
+  }
+});
 $("playBtn").addEventListener("click", togglePlay);
 $("demoBtn").addEventListener("click", () => { if (A.el) A.el.pause(); $("trackName").textContent = "демо-сигнал · 124 BPM · без звука"; A.intervals = []; log("Сигнал: демо 124 BPM", "ok"); });
 const prevSpec = new Uint8Array(512);
 function analyse(dt, now) {
-  A.live = !!(A.el && !A.el.paused && A.el.src);
+  A.live = !!(A.mic || (A.el && !A.el.paused && A.el.src));
   if (A.live) {
     A.an.getByteFrequencyData(A.fbuf); A.an.getByteTimeDomainData(A.tbuf);
     const binHz = A.ctx.sampleRate / A.an.fftSize, n = A.fbuf.length;
@@ -362,10 +416,12 @@ const Mod = {
     const p = slot.preset, e = slot.eff;
     for (let i = 0; i < 8; i++) e.params[i] = p.params[i];
     for (const [k] of POST_KEYS) e.post[k] = p.post[k];
+    Object.assign(e.look, p.look);
     for (const m of p.mods || []) {
       const d = (this.values[m.src] || 0) * m.amt;
       if (m.dst[0] === "p" && m.dst.length === 2) { const i = +m.dst[1]; e.params[i] = clamp01(e.params[i] + d); }
       else if (m.dst in e.post) e.post[m.dst] = clamp01(e.post[m.dst] + d);
+      else if (m.dst in e.look) e.look[m.dst] = clamp01(e.look[m.dst] + d);
     }
     e.palRGB = p.palRGB; e.seed = p.seed;
     return e;
@@ -405,7 +461,7 @@ const Mod = {
 };
 function targetName(dst) {
   if (dst[0] === "p" && dst.length === 2) { const s = active(); return s?.style.params[+dst[1]]?.name || "Параметр " + (+dst[1] + 1); }
-  return (POST_KEYS.find(k => k[0] === dst) || [0, dst])[1];
+  return (POST_KEYS.find(k => k[0] === dst) || LOOK_KEYS.find(k => k[0] === dst) || [0, dst])[1];
 }
 const chipEls = {};
 SOURCES.forEach(([k, l]) => {
@@ -432,7 +488,7 @@ A.attack = .002 + .04 * .3; A.release = .02 + .2025 * 1.2;
 $("agc").addEventListener("change", e => A.agc = e.target.checked);
 
 /* ================= live effects (pads) ================= */
-const PADS = [["strobe", "Строб", "Q"], ["freeze", "Стоп-кадр", "W"], ["invert", "Инверсия", "E"], ["mirror", "Зеркало", "R"], ["punch", "Удар зума", "A"], ["rgb", "RGB-взрыв", "D"]];
+const PADS = [["strobe", "Строб", "Q"], ["freeze", "Стоп-кадр", "W"], ["invert", "Инверсия", "E"], ["mirror", "Зеркало", "R"], ["punch", "Удар зума", "A"], ["rgb", "RGB-взрыв", "D"], ["kaleido", "Калейдо", "Z"], ["pixel", "Пиксели", "X"], ["echo", "Эхо", "C"]];
 const FX = { held: {}, latched: {} };
 const padEls = {};
 PADS.forEach(([k, l, key]) => {
@@ -451,6 +507,7 @@ function fxState() {
     strobe: fxOn("strobe") ? ((Clock.pos * 4) % 1 < .5 ? 1 : 0) : 1,
     freeze: fxOn("freeze"), invert: fxOn("invert"), mirror: fxOn("mirror"),
     punch: fxOn("punch") ? Clock.pulse : 0,
+    kaleido: fxOn("kaleido"), pixel: fxOn("pixel"),
   };
 }
 
@@ -504,11 +561,79 @@ function step(dir, auto) {
 
 /* ================= left panel tabs ================= */
 function showPane(p) {
-  $("paneQuery").hidden = p !== "query"; $("paneMod").hidden = p !== "mod";
-  $("ptQuery").setAttribute("aria-selected", p === "query"); $("ptMod").setAttribute("aria-selected", p === "mod");
+  $("paneQuery").hidden = p !== "query"; $("paneMod").hidden = p !== "mod"; $("paneEpoch").hidden = p !== "epoch";
+  $("ptQuery").setAttribute("aria-selected", p === "query"); $("ptMod").setAttribute("aria-selected", p === "mod"); $("ptEpoch").setAttribute("aria-selected", p === "epoch");
 }
 $("ptQuery").addEventListener("click", () => showPane("query"));
 $("ptMod").addEventListener("click", () => showPane("mod"));
+$("ptEpoch").addEventListener("click", () => showPane("epoch"));
+
+/* ================= epoch: lenses + symbols ================= */
+const Epoch = {
+  atlasSet: null, count: 1, atlases: {},
+  ensureAtlas(set) {
+    if (set === this.atlasSet) return; this.atlasSet = set;
+    if (!this.atlases[set]) {
+      const chars = Array.from((SYMBOL_SETS.find(x => x[0] === set) || SYMBOL_SETS[0])[3]).filter(ch => ch !== "\ufe0e");
+      const glyphs = []; for (const ch of chars) { if (ch === "\ufe0e") continue; glyphs.push(ch); }
+      const cv = document.createElement("canvas"); cv.width = cv.height = 512; const x = cv.getContext("2d");
+      x.fillStyle = "#fff"; x.textAlign = "center"; x.textBaseline = "middle";
+      x.font = '600 44px "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans Runic", "Hiragino Sans", "Noto Sans JP", "IBM Plex Sans", sans-serif';
+      const list = glyphs.slice(0, 48);
+      list.forEach((ch, i) => x.fillText(ch + "\ufe0e", (i % 8) * 64 + 32, Math.floor(i / 8) * 64 + 34));
+      const RAMP = [" ", ".", "·", ":", "-", "~", "=", "+", "*", "o", "x", "%", "#", "&", "@", "█"];
+      x.font = '500 48px "IBM Plex Mono", ui-monospace, monospace';
+      RAMP.forEach((ch, i) => { const g = 48 + i; x.fillText(ch, (g % 8) * 64 + 32, Math.floor(g / 8) * 64 + 34); });
+      this.atlases[set] = { cv, n: Math.max(1, list.length) };
+    }
+    E.setGlyphs(this.atlases[set].cv); this.count = this.atlases[set].n;
+  },
+  bind(look) {
+    $("lensSel").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === look.lens));
+    $("symSel").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === look.sym));
+    $("symMode").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.m === look.symMode));
+    LOOK_KEYS.forEach(([k]) => knobs[k].set(look[k]));
+  },
+};
+function epochChips(host, list, onPick) {
+  list.forEach(([id, name, era]) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip era"; b.dataset.id = id; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = "<span></span><small></small>"; b.firstChild.textContent = name; b.lastChild.textContent = era;
+    b.addEventListener("click", () => { const s = active(); if (!s) return; onPick(s.preset.look, id); Epoch.bind(s.preset.look); }); host.appendChild(b);
+  });
+}
+epochChips($("lensSel"), LENSES, (L, id) => { L.lens = id; });
+epochChips($("symSel"), SYMBOL_SETS, (L, id) => { L.sym = id; if (!L.symMode) L.symMode = 2; });
+SYM_MODES.forEach(([m, l]) => { const b = document.createElement("button"); b.type = "button"; b.dataset.m = m; b.textContent = l;
+  b.addEventListener("click", () => { const s = active(); if (!s) return; s.preset.look.symMode = +m; Epoch.bind(s.preset.look); }); $("symMode").appendChild(b); });
+LOOK_KEYS.slice(0, 2).forEach(([k, l, d]) => knob($("lensKnobs"), { id: k, label: l, value: d, onInput: v => { const s = active(); if (s) s.preset.look[k] = v; } }));
+LOOK_KEYS.slice(2).forEach(([k, l, d]) => knob($("symKnobs"), { id: k, label: l, value: d, onInput: v => { const s = active(); if (s) s.preset.look[k] = v; } }));
+
+/* ================= chance: random synthesis ================= */
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function chance() {
+  const st = pick([...styles.values()]);
+  const [palName, palette] = pick(ERA_PALETTES);
+  const lens = Math.random() < .45 ? "none" : pick(LENSES.slice(1))[0];
+  const symOn = Math.random() < .4;
+  const set = pick(SYMBOL_SETS);
+  const srcs = ["bass", "mid", "high", "onset", "lfo1", "lfo2", "rand", "beat"];
+  const mods = Array.from({ length: 2 + Math.floor(Math.random() * 3) }, () => ({ src: pick(srcs), dst: Math.random() < .7 ? "p" + Math.floor(Math.random() * st.params.length) : pick(["bloom", "chroma", "zoom", "twist", "lensP", "symDen"]), amt: +(Math.random() * .8 - .2).toFixed(2) }));
+  const lensName = (LENSES.find(l => l[0] === lens) || [])[1];
+  const p = makePreset(st, {
+    name: [st.name, lens !== "none" ? lensName : null, symOn ? set[1] : null].filter(Boolean).join(" · "),
+    note: `${palName}${lens !== "none" ? ", линза «" + lensName + "»" : ""}${symOn ? ", знаки: " + set[1].toLowerCase() : ""}.`,
+    params: st.params.map(() => Math.random()), palette,
+    post: { trail: Math.random() * .6, zoom: .44 + Math.random() * .14, twist: .44 + Math.random() * .12, bloom: .2 + Math.random() * .5, chroma: Math.random() * .4, scan: Math.random() * .5 },
+    look: { lens, lensAmt: .7 + Math.random() * .3, lensP: Math.random(), sym: set[0], symMode: symOn ? 1 + Math.floor(Math.random() * 4) : 0, symAmt: .5 + Math.random() * .5, symSize: Math.random(), symDen: .3 + Math.random() * .6 },
+    mods,
+  });
+  $("variants").prepend(variantCard(p, st));
+  while ($("variants").children.length > 6) $("variants").lastChild.remove();
+  apply(clonePreset(p), { key: "" });
+  log("Случай: " + p.name, "ai");
+}
+$("chanceBtn").addEventListener("click", chance);
 
 /* ================= AI: director + forge ================= */
 let sample = null, aiMode = "pick", running = null;
@@ -552,8 +677,10 @@ Rules:
 - "palette": 4 hex colours from darkest to brightest. The first is the background tone, near black (LED: black is light off). The last is the brightest highlight.
 - "post": trail, zoom (0.5 still), twist (0.5 none), bloom, chroma (RGB split), scan (CRT scanlines), all 0..1. Keep zoom and twist within 0.35..0.65 unless the request is wild.
 - "mods": 2 to 5 modulation routes that make the picture play with the music like a skilled VJ: sources bass, mid, high, level, beat (pulse on each beat), bar (ramp over a 4-beat bar), lfo1 (slow, 1 bar), lfo2 (very slow, 4 bars), rand (new random value each beat), onset (transient hits); targets p0..pN (style params) or trail, zoom, twist, bloom, chroma, scan; amount -1..1 added to the base value. Prefer structure over flashing: e.g. bass → a size or density param, onset → chroma small, lfo2 → a colour or rotation param, high → bloom small.
+- "look": an era lens that re-renders the whole picture in another medium, and an optional symbol layer. lens: ${LENSES.map(l => `${l[0]} (${l[1]}, ${l[2]})`).join("; ")}. lensAmt and lensP (cell/line scale) 0..1. sym: ${SYMBOL_SETS.map(x => `${x[0]} (${x[1]}, ${x[2]})`).join("; ")}. symMode: 0 off, 1 falling rain, 2 orbit rings, 3 grid flicker on beats, 4 one large sign per bar. symAmt, symSize, symDen 0..1. Mix eras boldly when it serves the idea (e.g. gothic rose window seen through VHS, runes orbiting a 1960s cosmos), but keep it readable on a giant screen. Mod targets may also be lensAmt, lensP, symAmt, symSize, symDen.
+- Era palettes you may borrow: ${ERA_PALETTES.map(p => p[0] + " " + p[1].join(" ")).join("; ")}.
 - "name": 1-3 evocative words in Russian. "note": one short sentence in Russian about the idea and how it moves with the music.
-Reply with only JSON: {"variants":[{"style":"id","name":"...","note":"...","params":[...],"palette":["#...","#...","#...","#..."],"post":{"trail":0,"zoom":0.5,"twist":0.5,"bloom":0,"chroma":0,"scan":0},"mods":[{"src":"bass","dst":"p1","amt":0.4}]}]}
+Reply with only JSON: {"variants":[{"style":"id","name":"...","note":"...","params":[...],"palette":["#...","#...","#...","#..."],"post":{"trail":0,"zoom":0.5,"twist":0.5,"bloom":0,"chroma":0,"scan":0},"look":{"lens":"none","lensAmt":1,"lensP":0.5,"sym":"runes","symMode":0,"symAmt":0.8,"symSize":0.35,"symDen":0.5},"mods":[{"src":"bass","dst":"p1","amt":0.4}]}]}
 
 Request: ${req}`;
 const FORGE = req => `You write a new visual style for ЛУЧ-3000, a real-time music visualizer for concerts on big LED screens.
@@ -755,7 +882,7 @@ $("recBtn").addEventListener("click", () => {
 
 /* ================= keyboard ================= */
 async function toggleFS() { try { document.fullscreenElement ? await document.exitFullscreen() : await document.documentElement.requestFullscreen(); } catch (e) { toast("Полный экран здесь недоступен"); } }
-const PAD_KEYS = { q: "strobe", й: "strobe", w: "freeze", ц: "freeze", e: "invert", у: "invert", r: "mirror", к: "mirror", a: "punch", ф: "punch", d: "rgb", в: "rgb" };
+const PAD_KEYS = { q: "strobe", й: "strobe", w: "freeze", ц: "freeze", e: "invert", у: "invert", r: "mirror", к: "mirror", a: "punch", ф: "punch", d: "rgb", в: "rgb", z: "kaleido", я: "kaleido", x: "pixel", ч: "pixel", c: "echo", с: "echo" };
 addEventListener("keydown", e => {
   if (e.target.closest && e.target.closest("textarea, input:not([type=color]):not([type=checkbox]), select")) return;
   if (e.target.classList?.contains("knob") && e.key.startsWith("Arrow")) return;
@@ -797,12 +924,16 @@ function frame(now) {
     const ea = { prog: live.a.prog, preset: Mod.effective(live.a) };
     const eb = live.b ? { prog: live.b.prog, preset: Mod.effective(live.b) } : null;
     const post = { ...lead.eff.post }; if (fxOn("rgb")) post.chroma = Math.min(1, post.chroma + .5 + Clock.pulse * .5);
-    const s = { time: t, bass: A.bass, mid: A.mid, high: A.high, level: A.level, beat: Math.max(Clock.pulse * (A.live || !A.el ? 1 : 0), A.onset * .6), realTime: now / 1000 };
-    E.frame(s, ea, eb, live.b ? live.x : 0, post, post.scan, live.master, fxState());
+    if (fxOn("echo")) post.trail = .97;
+    const lk = lead.eff.look; Epoch.ensureAtlas(lk.sym);
+    const look = { lens: LENS_IDX[lk.lens] || 0, lensAmt: lk.lensAmt, lensP: lk.lensP, sym: lk.symMode, symAmt: lk.symAmt, symSize: lk.symSize, symDen: lk.symDen, symN: Epoch.count, palRGB: lead.eff.palRGB };
+    const s = { time: t, bass: A.bass, mid: A.mid, high: A.high, level: A.level, beat: Math.max(Clock.pulse * (A.live || !A.el ? 1 : 0), A.onset * .6), realTime: now / 1000, beatN: Math.floor(Clock.pos) };
+    E.frame(s, ea, eb, live.b ? live.x : 0, post, post.scan, live.master, fxState(), look);
     if (wantShot) { wantShot = false; $("stage").toBlob(b => b && offer(b, `luch3000-${Date.now()}.png`), "image/png"); }
     if (++uiTick % 3 === 0) {
       styleKnobs.forEach((k, i) => k.setMod(lead.preset.mods.some(m => m.dst === "p" + i) ? lead.eff.params[i] : null));
       POST_KEYS.forEach(([k]) => knobs[k].setMod(lead.preset.mods.some(m => m.dst === k) ? lead.eff.post[k] : null));
+      LOOK_KEYS.forEach(([k]) => knobs[k].setMod(lead.preset.mods.some(m => m.dst === k) ? lead.eff.look[k] : null));
       SOURCES.forEach(([k]) => { chipEls[k].style.setProperty("--v", (Mod.values[k] || 0).toFixed(3)); chipEls[k].querySelector("i").textContent = Math.round((Mod.values[k] || 0) * 99); });
     }
   }
@@ -834,5 +965,6 @@ renderLibrary();
 Store.init();
 setMode("pick");
 showPane("query");
+window.LUCH = { engine: E, styles };
 requestAnimationFrame(frame);
 })();
